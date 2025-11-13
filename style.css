@@ -41,6 +41,10 @@ header {
     overflow-y: auto;
 }
 
+.sidebar h2 {
+    text-align: center;
+}
+
 .sidebar button {
     display: block;
     width: 90%;
