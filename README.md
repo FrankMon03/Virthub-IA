@@ -6,6 +6,7 @@ Este Proyecto esta en desarrollo
     * Un Acceso a contenedores incluyendo un instalador via web para la terminal de Linux o Windows
     * Una IA con API's Gratuitas donde cada usuario seleccionara su IA preferida
     * Un codigo más puro sin depedencias de la IA
+    * Usar un FrameWork pero que sea compatible con mi CSS (Soy Hater de Python DJango)
 
 
 ## Whoami?
