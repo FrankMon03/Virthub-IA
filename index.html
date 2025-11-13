@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <style></style>
 <head>
     <meta charset="UTF-8">
@@ -11,11 +11,20 @@
     <header>
         <h1>VirtHub</h1>
     </header>
+    <div class= "toggleable-sidebar" onclick="toggleMenu()">
+        ☰
     <div class="sidebar">
         <h2>Navigation</h2>
         <button onclick="location.href='index.html'">Home</button>
         <button onclick="location.href='about.html'">About</button>
     </div>
-    <footer>CodeName: VirtHub v0.1 IA Prototype</footer>
+    </div>
+    <footer>CodeName: VirtHub v0.2 IA Prototype</footer>
+    <script>
+        function toggleMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.style.display = sidebar.style.display === 'block' ? 'none' : 'block';
+        }
+    </script>
 </body>
 </html>

@@ -15,19 +15,30 @@ header {
     padding: 15px 0;
 }
 
-.sidebar {
+.toggleable-sidebar {
     position: fixed;
-    top: 20%;
     left: 0;
-    height: 100%;
+    background-color: rgba(142, 166, 255, 0.2);
+    backdrop-filter: blur(10px); /* Este añade un efecto de desenfoque al fondo del botón similar al aero */
+    padding: 10px;
+    font-family: Monocraft Nerd Font, monospace;
+    color: #75e1a0;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.sidebar {
+    position: relative;
+    height: 625px;
+    left: 0;
     width: auto;
     background-color: rgba(142, 166, 255, 0.2);
     backdrop-filter: blur(10px); /* Este añade un efecto de desenfoque al fondo de la barra lateral similar al aero */
     padding: 10px;
     font-family: Monocraft Nerd Font, monospace;
     color: #75e1a0;
-    height: auto;
     z-index: 5;
+    overflow-y: auto;
 }
 
 .sidebar button {
