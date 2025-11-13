@@ -28,7 +28,7 @@ header {
 }
 
 .sidebar {
-    position: fixed;
+    position: relative;
     height: 625px;
     left: 0;
     width: auto;
