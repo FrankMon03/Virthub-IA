@@ -282,7 +282,7 @@
         </div>
     </section>
 
-    <footer>Codename Virthub 0.9c PreRelease</footer>
+    <footer>Virthub 1.0</footer>
 
     <script>
         function getThemeStorageKey() {

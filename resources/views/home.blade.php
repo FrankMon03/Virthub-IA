@@ -469,8 +469,16 @@
                         </article>
 
                         <article class="system-metric-card system-metric-card-compact">
-                            <header><h4>WebTop</h4><strong id="sys_webtop">{{ !empty($systemStatus['webtop_online']) ? 'Online' : 'Offline' }}</strong></header>
-                            <div class="system-state-pill" id="sys_webtop_pill">{{ !empty($systemStatus['webtop_online']) ? 'Servicio activo' : 'Servicio no disponible' }}</div>
+                            <header><h4>Contenedores</h4><strong id="sys_containers_count">-</strong></header>
+                            <div id="sys_containers_list" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;">
+                                <div class="system-state-pill" id="container_0" title="ct0: Verde=Activo, Rojo=Caído">ct0</div>
+                                <div class="system-state-pill" id="container_2" title="ct2: Verde=Activo, Rojo=Caído">ct2</div>
+                                <div class="system-state-pill" id="container_3" title="ct3: Verde=Activo, Rojo=Caído">ct3</div>
+                                <div class="system-state-pill" id="container_4" title="ct4: Verde=Activo, Rojo=Caído">ct4</div>
+                                <div class="system-state-pill" id="container_5" title="ct5: Verde=Activo, Rojo=Caído">ct5</div>
+                                <div class="system-state-pill" id="container_6" title="ct6: Verde=Activo, Rojo=Caído">ct6</div>
+                                <div class="system-state-pill" id="container_7" title="ct7: Verde=Activo, Rojo=Caído">ct7</div>
+                            </div>
                         </article>
 
                     </div>
@@ -479,7 +487,7 @@
         @endif
     </div>
 
-    <footer>Codename Virthub 0.9c PreRelease</footer>
+    <footer>Virthub 1.0</footer>
     <script>
         function getUserKey() {
             return @json($currentUser['username'] ?? 'guest');
@@ -1568,14 +1576,27 @@
                 document.getElementById('sys_ram').textContent = status.ram_used_percent != null ? `${status.ram_used_percent}%` : '-';
                 document.getElementById('sys_ram_mb').textContent = status.ram_used_mb ?? '-';
                 document.getElementById('sys_disk').textContent = status.disk_used_percent != null ? `${status.disk_used_percent}%` : '-';
-                document.getElementById('sys_webtop').textContent = status.webtop_online ? 'Online' : 'Offline';
                 updateLocalTimezoneLabels();
-                const webtopPill = document.getElementById('sys_webtop_pill');
-                if (webtopPill) {
-                    webtopPill.textContent = status.webtop_online ? 'Servicio activo' : 'Servicio no disponible';
-                    webtopPill.classList.toggle('is-online', !!status.webtop_online);
-                    webtopPill.classList.toggle('is-offline', !status.webtop_online);
+
+                // Actualizar estado de contenedores
+                const containerStatus = status.container_status || {};
+                let containersOnline = 0;
+                const containerIds = [0, 2, 3, 4, 5, 6, 7]; // Sin ct1
+                containerIds.forEach(i => {
+                    const isOnline = !!containerStatus[i];
+                    const pill = document.getElementById(`container_${i}`);
+                    if (pill) {
+                        pill.textContent = `ct${i}`;
+                        pill.classList.toggle('is-online', isOnline);
+                        pill.classList.toggle('is-offline', !isOnline);
+                    }
+                    if (isOnline) containersOnline++;
+                });
+                const countEl = document.getElementById('sys_containers_count');
+                if (countEl) {
+                    countEl.textContent = `${containersOnline}/7`;
                 }
+
                 updateSystemCharts(status);
             } catch (error) {
                 // Keep last known values when request fails.

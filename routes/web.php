@@ -64,6 +64,23 @@ if (!function_exists('virthub_system_status')) {
 			}
 		}
 
+		// Verificar estado de contenedores
+		$containerStatus = [];
+		$containerIds = [0, 2, 3, 4, 5, 6, 7]; // Sin ct1
+		foreach ($containerIds as $i) {
+			$containerKey = 'CONTAINER_CT' . $i;
+			$containerUrl = (string) env($containerKey, '');
+			$containerStatus[$i] = false;
+
+			if ($containerUrl !== '') {
+				try {
+					$containerStatus[$i] = Http::timeout(3)->get($containerUrl)->successful();
+				} catch (Throwable $e) {
+					$containerStatus[$i] = false;
+				}
+			}
+		}
+
 		return [
 			'timestamp' => date('Y-m-d H:i:s'),
 			'timestamp_utc' => gmdate('c'),
@@ -72,6 +89,7 @@ if (!function_exists('virthub_system_status')) {
 			'ram_used_percent' => $ramUsedPercent,
 			'disk_used_percent' => $diskUsedPercent,
 			'webtop_online' => $webtopOnline,
+			'container_status' => $containerStatus,
 		];
 	}
 }
@@ -118,6 +136,37 @@ if (!function_exists('virthub_active_user')) {
 			'profile_image_path' => $freshUser['profile_image_path'] ?? null,
 			'profile_frame_color' => $freshUser['profile_frame_color'] ?? '#6ea8ff',
 		];
+	}
+}
+
+if (!function_exists('virthub_get_container_url')) {
+	function virthub_get_container_url(?array $user): string
+	{
+		if (!$user) {
+			return (string) env('CONTAINER_CT7', 'https://ct7.virthub.dpdns.org/');
+		}
+
+		$username = $user['username'] ?? 'guest';
+		$role = $user['role'] ?? 'user';
+
+		// Usuario invitado → ct7
+		if ($role === 'guest') {
+			return (string) env('CONTAINER_CT7', 'https://ct7.virthub.dpdns.org/');
+		}
+
+		// Admin y hankhound03 → ct0
+		$adminUsers = (string) env('CONTAINER_ADMIN_USERS', 'admin,hankhound03');
+		$adminUsersList = array_map('trim', explode(',', $adminUsers));
+
+		if (in_array($username, $adminUsersList, true)) {
+			return (string) env('CONTAINER_CT0', 'https://ct0.virthub.dpdns.org/');
+		}
+
+		// Otros usuarios → distribución ct2 a ct6
+		$containerIndex = (crc32($username) % 5) + 2;
+		$containerKey = 'CONTAINER_CT' . $containerIndex;
+
+		return (string) env($containerKey, 'https://ct' . $containerIndex . '.virthub.dpdns.org/');
 	}
 }
 
@@ -1087,7 +1136,7 @@ Route::get('/contenedor/launch', function (Request $request) {
 		return redirect('/')->with('error', 'Tu cuenta fue desactivada o la sesion ya no es valida.');
 	}
 
-	$url = (string) env('WEBTOP_URL', 'https://example.com');
+	$url = virthub_get_container_url($authUser);
 
 	return redirect()->away($url);
 });
