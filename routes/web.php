@@ -11,15 +11,18 @@ use Illuminate\Support\Facades\Route;
 if (!function_exists('virthub_system_status')) {
 	function virthub_system_status(): array
 	{
-		$load = sys_getloadavg();
-		$cpuCores = (int) trim((string) @shell_exec('nproc 2>/dev/null'));
-		if ($cpuCores <= 0) {
-			$cpuCores = 1;
-		}
-
 		$cpuUsagePercent = null;
-		if (isset($load[0])) {
-			$cpuUsagePercent = round(min(100, max(0, (((float) $load[0]) / $cpuCores) * 100)), 1);
+		
+		// sys_getloadavg() solo existe en Unix/Linux
+		if (function_exists('sys_getloadavg')) {
+			$load = sys_getloadavg();
+			$cpuCores = (int) trim((string) @shell_exec('nproc 2>/dev/null'));
+			if ($cpuCores <= 0) {
+				$cpuCores = 1;
+			}
+			if (isset($load[0])) {
+				$cpuUsagePercent = round(min(100, max(0, (((float) $load[0]) / $cpuCores) * 100)), 1);
+			}
 		}
 
 		$memTotalKb = null;
@@ -1155,7 +1158,7 @@ Route::get('/linux-news', function () {
 	$feedUrl = 'https://www.phoronix.com/rss.php';
 
 	try {
-		$response = Http::timeout(8)->get($feedUrl);
+		$response = Http::timeout(8)->withoutVerifying()->get($feedUrl);
 
 		if (!$response->successful()) {
 			return response()->json(['items' => []], 200);
@@ -1190,7 +1193,7 @@ Route::get('/cyber-news', function () {
 	$feedUrl = 'https://feeds.feedburner.com/TheHackersNews';
 
 	try {
-		$response = Http::timeout(8)->get($feedUrl);
+		$response = Http::timeout(8)->withoutVerifying()->get($feedUrl);
 
 		if (!$response->successful()) {
 			return response()->json(['items' => []], 200);
