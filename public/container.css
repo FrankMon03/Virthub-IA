@@ -216,6 +216,38 @@
   color: var(--vh-text-soft);
 }
 
+#ollamaInput,
+#broadcastInput {
+  flex: 1;
+  background-color: var(--vh-button-bg);
+  border: 1px solid var(--vh-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--vh-text);
+  font-family: Monocraft Nerd Font, monospace;
+  font-size: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+#ollamaInput:focus,
+#broadcastInput:focus {
+  outline: none;
+  background-color: var(--vh-button-hover);
+  border-color: var(--vh-border);
+}
+
+#ollamaInput::placeholder,
+#broadcastInput::placeholder {
+  color: var(--vh-text-soft);
+}
+
+#chatInput:disabled,
+#ollamaInput:disabled,
+#broadcastInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .chat-send-btn {
   background-color: var(--vh-button-bg);
   border: 1px solid var(--vh-border);
@@ -232,12 +264,18 @@
   background-color: var(--vh-button-hover);
 }
 
+.chat-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .container-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
   transition: transform 0.3s ease;
+  gap: 10px;
 }
 
 .container-wrapper.chat-open .container-main {
@@ -261,6 +299,115 @@ iframe {
   padding: 10px;
   flex-shrink: 0;
   gap: 8px;
+}
+
+.ollama-card {
+  margin: 10px 10px 0 10px;
+  padding: 14px;
+  border: 1px solid var(--vh-border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(117, 225, 160, 0.08), rgba(10, 14, 24, 0.28));
+  backdrop-filter: blur(12px);
+  color: var(--vh-text);
+}
+
+.ollama-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.ollama-card-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ollama-card-header p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--vh-text-soft);
+}
+
+.ollama-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--vh-border);
+  background-color: var(--vh-button-bg);
+  font-size: 11px;
+  color: var(--vh-text);
+  white-space: nowrap;
+}
+
+.ollama-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 88px;
+  box-sizing: border-box;
+  background-color: var(--vh-surface-strong);
+  border: 1px solid var(--vh-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--vh-text);
+  font-family: Monocraft Nerd Font, monospace;
+  font-size: 13px;
+}
+
+.ollama-prompt:focus {
+  outline: none;
+  border-color: rgba(117, 225, 160, 0.55);
+}
+
+.ollama-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.ollama-send-btn {
+  padding: 9px 14px;
+  border: 1px solid var(--vh-border);
+  border-radius: 10px;
+  background-color: var(--vh-button-bg);
+  color: var(--vh-text);
+  font-family: Monocraft Nerd Font, monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.ollama-send-btn:hover {
+  background-color: var(--vh-button-hover);
+  transform: translateY(-1px);
+}
+
+.ollama-send-btn:disabled,
+.ollama-prompt:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ollama-response {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--vh-border);
+  background-color: rgba(0, 0, 0, 0.12);
+  color: var(--vh-text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  min-height: 76px;
+}
+
+.ollama-response.is-error {
+  color: #ffb7b7;
+  border-color: rgba(229, 90, 90, 0.35);
+  background-color: rgba(229, 90, 90, 0.12);
 }
 
 .container-load-btn {
@@ -296,6 +443,14 @@ body.dark-mode iframe {
 
 .chat-view.active {
   display: flex;
+}
+
+.chat-view-note {
+  margin: 0;
+  padding: 0 12px 8px 12px;
+  font-size: 11px;
+  color: var(--vh-text-soft);
+  line-height: 1.3;
 }
 
 .chat-users-list {
@@ -470,6 +625,7 @@ body.dark-mode iframe {
   }
 
   #chatInput,
+  #ollamaInput,
   #broadcastInput {
     min-width: 0;
     font-size: 11px;
@@ -494,6 +650,15 @@ body.dark-mode iframe {
 
   .container-toolbar {
     padding: 8px;
+  }
+
+  .ollama-card {
+    margin: 8px 8px 0 8px;
+    padding: 12px;
+  }
+
+  .ollama-card-header {
+    flex-direction: column;
   }
 
   .container-load-btn {

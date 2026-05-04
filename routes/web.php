@@ -189,6 +189,33 @@ if (!function_exists('virthub_chat_is_recent_presence')) {
 	}
 }
 
+if (!function_exists('virthub_ollama_settings')) {
+	function virthub_ollama_settings(): array
+	{
+		$baseUrl = trim((string) env('OLLAMA_BASE_URL', ''));
+		$model = trim((string) env('OLLAMA_MODEL', 'llama3.1'));
+		$systemPrompt = trim((string) env('OLLAMA_SYSTEM_PROMPT', 'Responde en español, de forma clara, breve y útil. Usa listas y saltos de línea cuando ayuden a leer mejor la respuesta.'));
+		$requestTimeout = (int) env('OLLAMA_REQUEST_TIMEOUT', 9999);
+		$connectTimeout = (int) env('OLLAMA_CONNECT_TIMEOUT', 5);
+
+		return [
+			'enabled' => $baseUrl !== '',
+			'base_url' => $baseUrl,
+			'model' => $model !== '' ? $model : 'llama3.1',
+			'system_prompt' => $systemPrompt !== '' ? $systemPrompt : 'Responde en español, de forma clara, breve y útil.',
+			'request_timeout' => $requestTimeout > 0 ? $requestTimeout : 9999,
+			'connect_timeout' => $connectTimeout > 0 ? $connectTimeout : 5,
+		];
+	}
+}
+
+if (!function_exists('virthub_ollama_chat_username')) {
+	function virthub_ollama_chat_username(): string
+	{
+		return 'ollama';
+	}
+}
+
 Route::get('/', function (Request $request, JsonUserStore $users) {
 	$users->bootstrapAdminFromEnv();
 	$currentUser = virthub_active_user($request, $users);
@@ -216,17 +243,17 @@ Route::get('/', function (Request $request, JsonUserStore $users) {
 	]);
 });
 
-Route::get('/home/state', function (Request $request, JsonUserStore $users, UserWorkspaceStore $workspaceStore) {
-	$authUser = virthub_active_user($request, $users);
+	Route::get('/home/state', function (Request $request, JsonUserStore $users, UserWorkspaceStore $workspaceStore) {
+		$authUser = virthub_active_user($request, $users);
 
-	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
-		return response()->json(['error' => 'Debes iniciar sesion con usuario registrado.'], 403);
-	}
+		if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+			return response()->json(['error' => 'Debes iniciar sesion con usuario registrado.'], 403);
+		}
 
-	return response()->json([
-		'state' => $workspaceStore->getState((string) $authUser['username']),
-	], 200);
-});
+		return response()->json([
+			'state' => $workspaceStore->getState((string) $authUser['username']),
+		], 200);
+	});
 
 Route::post('/home/state', function (Request $request, JsonUserStore $users, UserWorkspaceStore $workspaceStore) {
 	$authUser = virthub_active_user($request, $users);
@@ -1008,10 +1035,14 @@ Route::get('/chat/conversation/{username}', function (Request $request, string $
 
 	$users->touchPresence((string) $authUser['username']);
 
-	$targetUser = $users->findByUsername($username);
+	$isOllamaConversation = strtolower(trim($username)) === virthub_ollama_chat_username();
 
-	if (!$targetUser || !($targetUser['is_active'] ?? true)) {
-		return response()->json(['error' => 'Usuario no encontrado'], 404);
+	if (!$isOllamaConversation) {
+		$targetUser = $users->findByUsername($username);
+
+		if (!$targetUser || !($targetUser['is_active'] ?? true)) {
+			return response()->json(['error' => 'Usuario no encontrado'], 404);
+		}
 	}
 
 	$messages = $chatStore->getConversationMessages((string) $authUser['username'], $username);
@@ -1024,6 +1055,16 @@ Route::get('/chat/conversation/{username}', function (Request $request, string $
 		}
 		return $message;
 	}, $messages);
+
+	if ($isOllamaConversation) {
+		$enrichedMessages = array_map(function (array $message): array {
+			if (($message['from'] ?? '') === virthub_ollama_chat_username()) {
+				$message['profile_image_path'] = null;
+			}
+
+			return $message;
+		}, $enrichedMessages);
+	}
 
 	return response()->json([
 		'messages' => $enrichedMessages,
@@ -1043,15 +1084,101 @@ Route::post('/chat/conversation/{username}', function (Request $request, string 
 
 	$users->touchPresence((string) $authUser['username']);
 
-	$targetUser = $users->findByUsername($username);
+	$isOllamaConversation = strtolower(trim($username)) === virthub_ollama_chat_username();
 
-	if (!$targetUser || !($targetUser['is_active'] ?? true)) {
-		return response()->json(['error' => 'Usuario no encontrado'], 404);
+	if (!$isOllamaConversation) {
+		$targetUser = $users->findByUsername($username);
+
+		if (!$targetUser || !($targetUser['is_active'] ?? true)) {
+			return response()->json(['error' => 'Usuario no encontrado'], 404);
+		}
 	}
 
 	$validated = $request->validate([
 		'message' => 'required|string|max:1000',
 	]);
+
+	if ($isOllamaConversation) {
+		if (($authUser['role'] ?? 'user') !== 'admin') {
+			return response()->json(['error' => 'Solo el admin puede usar esta IA.'], 403);
+		}
+
+		$ollamaSettings = virthub_ollama_settings();
+
+		if (!$ollamaSettings['enabled']) {
+			return response()->json([
+				'error' => 'Configura OLLAMA_BASE_URL en .env para habilitar la IA local.',
+			], 503);
+		}
+
+		$existingMessages = $chatStore->getConversationMessages((string) $authUser['username'], virthub_ollama_chat_username());
+		$ollamaMessages = [[
+			'role' => 'system',
+			'content' => $ollamaSettings['system_prompt'],
+		]];
+
+		foreach ($existingMessages as $existingMessage) {
+			$ollamaMessages[] = [
+				'role' => (($existingMessage['from'] ?? '') === virthub_ollama_chat_username()) ? 'assistant' : 'user',
+				'content' => (string) ($existingMessage['message'] ?? ''),
+			];
+		}
+
+		$ollamaMessages[] = [
+			'role' => 'user',
+			'content' => (string) $validated['message'],
+		];
+
+		try {
+			set_time_limit(9999);
+
+			$response = Http::connectTimeout($ollamaSettings['connect_timeout'])
+				->timeout($ollamaSettings['request_timeout'])
+				->acceptJson()
+				->post(rtrim($ollamaSettings['base_url'], '/') . '/api/chat', [
+					'model' => $ollamaSettings['model'],
+					'messages' => $ollamaMessages,
+					'stream' => false,
+				]);
+		} catch (Throwable $e) {
+			return response()->json([
+				'error' => 'No se pudo conectar con Ollama o la respuesta tardó demasiado.',
+			], 502);
+		}
+
+		if (!$response->successful()) {
+			return response()->json([
+				'error' => 'Ollama devolvio un error.',
+				'details' => $response->json() ?: $response->body(),
+			], 502);
+		}
+
+		$assistantReply = trim((string) data_get($response->json(), 'message.content', ''));
+
+		if ($assistantReply === '') {
+			return response()->json([
+				'error' => 'Ollama no devolvio texto util.',
+			], 502);
+		}
+
+		$userMessage = $chatStore->appendConversationMessage(
+			(string) $authUser['username'],
+			virthub_ollama_chat_username(),
+			(string) $validated['message']
+		);
+
+		$assistantMessage = $chatStore->appendConversationMessage(
+			virthub_ollama_chat_username(),
+			(string) $authUser['username'],
+			$assistantReply
+		);
+
+		return response()->json([
+			'user_message' => $userMessage,
+			'assistant_message' => $assistantMessage,
+			'model' => $ollamaSettings['model'],
+		], 201);
+	}
 
 	$message = $chatStore->appendConversationMessage(
 		(string) $authUser['username'],
@@ -1117,6 +1244,8 @@ Route::post('/chat/broadcast', function (Request $request, JsonUserStore $users,
 Route::get('/contenedor', function (Request $request) {
 	$authUser = virthub_active_user($request, app(JsonUserStore::class));
 	$guestRemainingSeconds = null;
+	$ollamaSettings = virthub_ollama_settings();
+	$canUseOllama = ($authUser['role'] ?? 'user') === 'admin';
 
 	if (!$authUser) {
 		return redirect('/')->with('error', 'Tu cuenta fue desactivada o la sesion ya no es valida.');
@@ -1129,6 +1258,9 @@ Route::get('/contenedor', function (Request $request) {
 	return view('contenedor', [
 		'currentUser' => $authUser,
 		'guestRemainingSeconds' => $guestRemainingSeconds,
+		'ollamaEnabled' => $ollamaSettings['enabled'],
+		'ollamaModel' => $ollamaSettings['model'],
+		'ollamaVisible' => $canUseOllama,
 	]);
 });
 
@@ -1143,6 +1275,65 @@ Route::get('/contenedor/launch', function (Request $request) {
 
 	return redirect()->away($url);
 });
+
+Route::post('/ai/ollama', function (Request $request, JsonUserStore $users) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser) {
+		return response()->json(['error' => 'Tu sesion no es valida.'], 403);
+	}
+
+	if (($authUser['role'] ?? 'user') !== 'admin') {
+		return response()->json(['error' => 'Solo el admin puede usar esta IA.'], 403);
+	}
+
+	$validated = $request->validate([
+		'prompt' => 'required|string|max:4000',
+	]);
+
+	$ollamaSettings = virthub_ollama_settings();
+
+	if (!$ollamaSettings['enabled']) {
+		return response()->json([
+			'error' => 'Configura OLLAMA_BASE_URL en .env para habilitar la IA local.',
+		], 503);
+	}
+
+	try {
+		$response = Http::timeout(120)
+			->acceptJson()
+			->post(rtrim($ollamaSettings['base_url'], '/') . '/api/generate', [
+				'model' => $ollamaSettings['model'],
+				'prompt' => $validated['prompt'],
+				'system' => $ollamaSettings['system_prompt'],
+				'stream' => false,
+			]);
+	} catch (Throwable $e) {
+		return response()->json([
+			'error' => 'No se pudo conectar con Ollama.',
+		], 502);
+	}
+
+	if (!$response->successful()) {
+		return response()->json([
+			'error' => 'Ollama devolvio un error.',
+			'details' => $response->json() ?: $response->body(),
+		], 502);
+	}
+
+	$reply = trim((string) ($response->json('response') ?? ''));
+
+	if ($reply === '') {
+		return response()->json([
+			'error' => 'Ollama no devolvio texto util.',
+		], 502);
+	}
+
+	return response()->json([
+		'response' => $reply,
+		'model' => $ollamaSettings['model'],
+	], 200);
+})->middleware('throttle:10,1');
 
 Route::get('/system-status', function (Request $request) {
 	$authUser = virthub_active_user($request, app(JsonUserStore::class));

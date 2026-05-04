@@ -71,6 +71,9 @@
                 @if (($currentUser['role'] ?? 'guest') !== 'guest')
                 <button type="button" class="chat-tab-btn active" onclick="switchChatTab('messages')" data-tab="messages">Mensajes</button>
                 <button type="button" class="chat-tab-btn" onclick="switchChatTab('users')" data-tab="users">Usuarios</button>
+                @if (($currentUser['role'] ?? 'user') === 'admin')
+                <button type="button" class="chat-tab-btn" onclick="openOllamaChat()" data-tab="ollama">IA</button>
+                @endif
                 <button type="button" class="chat-tab-btn" onclick="switchChatTab('broadcast')" data-tab="broadcast">Anuncios</button>
                 @else
                 <button type="button" class="chat-tab-btn active" onclick="switchChatTab('broadcast')" data-tab="broadcast">Anuncios</button>
@@ -93,6 +96,19 @@
                     <p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando usuarios...</p>
                 </div>
             </div>
+
+            @if (($currentUser['role'] ?? 'user') === 'admin')
+            <div id="ollamaView" class="chat-view">
+                <div class="chat-messages" id="ollamaMessages">
+                    <p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando chat de IA...</p>
+                </div>
+                <p class="chat-view-note">La IA puede tardar varios segundos en responder.</p>
+                <div class="chat-input-area">
+                    <input type="text" id="ollamaInput" placeholder="Escribe un mensaje para la IA..." onkeypress="if(event.key==='Enter') sendOllamaMessage();">
+                    <button type="button" onclick="sendOllamaMessage()" class="chat-send-btn">Enviar</button>
+                </div>
+            </div>
+            @endif
             @endif
 
             <div id="broadcastView" class="chat-view {{ (($currentUser['role'] ?? 'guest') === 'guest') ? 'active' : '' }}">
@@ -116,6 +132,10 @@
         const currentUserName = @json($currentUser['username'] ?? 'guest');
         const isGuestChatMode = @json((($currentUser['role'] ?? 'guest') === 'guest'));
         const chatNotificationSoundUrl = @json(asset('sounds/chat-notificacion.mp3'));
+        const ollamaVisible = @json((bool) (($currentUser['role'] ?? 'user') === 'admin'));
+        const ollamaEnabled = @json((bool) ($ollamaEnabled ?? false));
+        const ollamaModelName = @json((string) ($ollamaModel ?? 'llama3.1'));
+        const ollamaChatUser = 'ollama';
         
         let chatNotificationAudio = null;
         
@@ -354,7 +374,7 @@
 
                 const sender = message.from || '';
                 const senderProfile = { username: sender, profile_image_path: message.profile_image_path || null };
-                
+
                 const avatarNode = buildAvatarNode(senderProfile, 'chat-message-avatar');
                 header.appendChild(avatarNode);
 
@@ -365,10 +385,10 @@
                     const strong = document.createElement('strong');
                     strong.textContent = messageLabelPrefix;
                     body.appendChild(strong);
-                    body.appendChild(document.createTextNode(' ' + messageText));
-                } else {
-                    body.textContent = messageText;
+                    body.appendChild(document.createTextNode(' '));
                 }
+
+                body.appendChild(document.createTextNode(messageText));
 
                 const meta = document.createElement('small');
                 const timeLabel = safeTimeLabel(message.created_at);
@@ -537,6 +557,23 @@
             if (tab === 'broadcast') {
                 await loadBroadcastMessages();
             }
+
+            if (tab === 'ollama') {
+                await loadOllamaMessages();
+            }
+        }
+
+        function openOllamaChat() {
+            if (!ollamaVisible) {
+                return;
+            }
+
+            currentChatUser = ollamaChatUser;
+            switchChatTab('ollama');
+        }
+
+        function chatConversationTitle(username) {
+            return username === ollamaChatUser ? 'Chat con IA' : `Chat con ${username}`;
         }
 
         function userInitial(username) {
@@ -657,7 +694,7 @@
 
             if (currentChatUser === username) {
                 const messagesDiv = document.getElementById('chatMessages');
-                renderChatMessages(messagesDiv, messages, `Chat con ${username}`, getUserKey());
+                renderChatMessages(messagesDiv, messages, chatConversationTitle(username), getUserKey());
             }
 
             return messages;
@@ -685,7 +722,7 @@
 
             try {
                 const messages = await refreshConversationSilently(username, false);
-                renderChatMessages(messagesDiv, messages, `Chat con ${username}`, getUserKey());
+                renderChatMessages(messagesDiv, messages, chatConversationTitle(username), getUserKey());
             } catch (error) {
                 messagesDiv.innerHTML = `<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">${error.message}</p>`;
             }
@@ -715,7 +752,7 @@
 
                 const messagesDiv = document.getElementById('chatMessages');
                 const messages = await refreshConversationSilently(currentChatUser, false);
-                renderChatMessages(messagesDiv, messages, `Chat con ${currentChatUser}`, getUserKey());
+                renderChatMessages(messagesDiv, messages, chatConversationTitle(currentChatUser), getUserKey());
                 chatSnapshots.conversations[currentChatUser] = messages.length;
 
                 input.value = '';
@@ -748,13 +785,78 @@
             }
         }
 
+        async function loadOllamaMessages() {
+            const messagesDiv = document.getElementById('ollamaMessages');
+            if (!messagesDiv) return;
+
+            messagesDiv.innerHTML = '<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando chat de IA...</p>';
+
+            try {
+                const messages = await loadConversationMessages(ollamaChatUser);
+                chatSnapshots.conversations[ollamaChatUser] = messages.length;
+                renderChatMessages(messagesDiv, messages, chatConversationTitle(ollamaChatUser), getUserKey());
+            } catch (error) {
+                messagesDiv.innerHTML = `<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">${error.message}</p>`;
+            }
+        }
+
+        async function sendOllamaMessage() {
+            if (!ollamaVisible) return;
+
+            const input = document.getElementById('ollamaInput');
+            const sendBtn = document.querySelector('#ollamaView .chat-send-btn');
+            if (!input || !input.value.trim()) {
+                return;
+            }
+
+            const messageText = input.value.trim();
+
+            try {
+                // Deshabilitar input y botón mientras procesa
+                input.disabled = true;
+                sendBtn.disabled = true;
+                input.placeholder = 'Ollama está escribiendo...';
+
+                const response = await apiFetch(`/chat/conversation/${encodeURIComponent(ollamaChatUser)}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ message: messageText }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.error || 'No se pudo consultar la IA');
+                }
+
+                const messagesDiv = document.getElementById('ollamaMessages');
+                const messages = await loadConversationMessages(ollamaChatUser);
+                renderChatMessages(messagesDiv, messages, chatConversationTitle(ollamaChatUser), getUserKey());
+                chatSnapshots.conversations[ollamaChatUser] = messages.length;
+
+                input.value = '';
+                input.focus();
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                // Restaurar estado del input y botón
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.placeholder = 'Escribe un mensaje para la IA...';
+            }
+        }
+
         async function sendBroadcast() {
             const input = document.getElementById('broadcastInput');
+            const sendBtn = document.querySelector('#broadcastView .chat-send-btn');
             if (!input || !input.value.trim()) return;
 
             const messageText = input.value.trim();
 
             try {
+                // Deshabilitar input y botón mientras procesa
+                input.disabled = true;
+                sendBtn.disabled = true;
+                input.placeholder = 'Enviando anuncio...';
+
                 const response = await apiFetch('/chat/broadcast', {
                     method: 'POST',
                     body: JSON.stringify({ message: messageText }),
@@ -771,6 +873,11 @@
                 input.focus();
             } catch (error) {
                 alert(error.message);
+            } finally {
+                // Restaurar estado del input y botón
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.placeholder = 'Mensaje para todos...';
             }
         }
 
