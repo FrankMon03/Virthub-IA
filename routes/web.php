@@ -11,30 +11,61 @@ use Illuminate\Support\Facades\Route;
 if (!function_exists('virthub_system_status')) {
 	function virthub_system_status(): array
 	{
+		$isWindows = stripos(PHP_OS_FAMILY, 'Windows') !== false;
 		$cpuUsagePercent = null;
-		
-		// sys_getloadavg() solo existe en Unix/Linux
-		if (function_exists('sys_getloadavg')) {
-			$load = sys_getloadavg();
-			$cpuCores = (int) trim((string) @shell_exec('nproc 2>/dev/null'));
-			if ($cpuCores <= 0) {
-				$cpuCores = 1;
+		$memTotalKb = null;
+		$memAvailableKb = null;
+
+		// ===== CPU =====
+		if ($isWindows) {
+			// Windows: usar WMI
+			$cpuRaw = trim((string) @shell_exec(
+				'powershell -NoProfile -Command "(Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average" 2>$null'
+			));
+			if (is_numeric($cpuRaw)) {
+				$cpuUsagePercent = round(min(100, max(0, (float) $cpuRaw)), 1);
 			}
-			if (isset($load[0])) {
-				$cpuUsagePercent = round(min(100, max(0, (((float) $load[0]) / $cpuCores) * 100)), 1);
+		} else {
+			// Linux: sys_getloadavg()
+			if (function_exists('sys_getloadavg')) {
+				$load = sys_getloadavg();
+				$cpuCores = (int) trim((string) @shell_exec('nproc 2>/dev/null'));
+				if ($cpuCores <= 0) {
+					$cpuCores = 1;
+				}
+				if (isset($load[0])) {
+					$cpuUsagePercent = round(min(100, max(0, (((float) $load[0]) / $cpuCores) * 100)), 1);
+				}
 			}
 		}
 
-		$memTotalKb = null;
-		$memAvailableKb = null;
-		$memInfoRaw = @file_get_contents('/proc/meminfo');
+		// ===== RAM =====
+		if ($isWindows) {
+			// Windows: usar PowerShell
+			$totalRaw = trim((string) @shell_exec(
+				'powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize" 2>$null'
+			));
+			$freeRaw = trim((string) @shell_exec(
+				'powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory" 2>$null'
+			));
 
-		if (is_string($memInfoRaw) && $memInfoRaw !== '') {
-			if (preg_match('/^MemTotal:\s+(\d+)\s+kB/im', $memInfoRaw, $mTotal)) {
-				$memTotalKb = (int) $mTotal[1];
+			if (is_numeric($totalRaw)) {
+				$memTotalKb = (int) $totalRaw;
 			}
-			if (preg_match('/^MemAvailable:\s+(\d+)\s+kB/im', $memInfoRaw, $mAvail)) {
-				$memAvailableKb = (int) $mAvail[1];
+			if (is_numeric($freeRaw)) {
+				$memAvailableKb = (int) $freeRaw;
+			}
+		} else {
+			// Linux: /proc/meminfo
+			$memInfoRaw = @file_get_contents('/proc/meminfo');
+
+			if (is_string($memInfoRaw) && $memInfoRaw !== '') {
+				if (preg_match('/^MemTotal:\s+(\d+)\s+kB/im', $memInfoRaw, $mTotal)) {
+					$memTotalKb = (int) $mTotal[1];
+				}
+				if (preg_match('/^MemAvailable:\s+(\d+)\s+kB/im', $memInfoRaw, $mAvail)) {
+					$memAvailableKb = (int) $mAvail[1];
+				}
 			}
 		}
 
@@ -46,8 +77,9 @@ if (!function_exists('virthub_system_status')) {
 			$ramUsedPercent = round(($memUsedKb / $memTotalKb) * 100, 1);
 		}
 
-		$diskTotal = @disk_total_space('/');
-		$diskFree = @disk_free_space('/');
+		// ===== DISCO =====
+		$diskTotal = @disk_total_space(DIRECTORY_SEPARATOR);
+		$diskFree = @disk_free_space(DIRECTORY_SEPARATOR);
 		$diskUsedPercent = null;
 
 		if (is_int($diskTotal) || is_float($diskTotal)) {
@@ -56,6 +88,7 @@ if (!function_exists('virthub_system_status')) {
 			}
 		}
 
+		// ===== WEBTOP =====
 		$webtopUrl = (string) env('WEBTOP_URL', '');
 		$webtopOnline = false;
 
@@ -67,7 +100,7 @@ if (!function_exists('virthub_system_status')) {
 			}
 		}
 
-		// Verificar estado de contenedores
+		// ===== CONTENEDORES =====
 		$containerStatus = [];
 		$containerIds = [0, 2, 3, 4, 5, 6, 7]; // Sin ct1
 		foreach ($containerIds as $i) {
@@ -832,7 +865,7 @@ Route::post('/admin/users', function (Request $request, JsonUserStore $users) {
 	}
 
 	$validated = $request->validate([
-		'username' => ['nullable', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_]+$/'],
+		'username' => ['nullable', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 		'password' => ['nullable', 'string', 'min:6', 'max:72'],
 		'role' => 'required|in:user,admin',
 		'random_username' => 'nullable|in:1',
@@ -889,7 +922,7 @@ Route::post('/admin/users/password', function (Request $request, JsonUserStore $
 	}
 
 	$validated = $request->validate([
-		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_]+$/'],
+		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 		'new_password' => 'required|string|min:6|max:72',
 	]);
 
@@ -913,7 +946,7 @@ Route::post('/admin/users/deactivate', function (Request $request, JsonUserStore
 	}
 
 	$validated = $request->validate([
-		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_]+$/'],
+		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 	]);
 
 	try {
@@ -941,7 +974,7 @@ Route::post('/admin/users/activate', function (Request $request, JsonUserStore $
 	}
 
 	$validated = $request->validate([
-		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_]+$/'],
+		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 	]);
 
 	try {
@@ -960,7 +993,7 @@ Route::post('/admin/users/delete', function (Request $request, JsonUserStore $us
 	}
 
 	$validated = $request->validate([
-		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_]+$/'],
+		'username' => ['required', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 	]);
 
 	try {

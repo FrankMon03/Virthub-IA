@@ -123,8 +123,9 @@
         <div class="container-main">
             <div class="container-toolbar">
                 <button type="button" class="container-load-btn" onclick="loadInIframe(true)">Recargar Contenedor</button>
+                <button type="button" class="container-load-btn" id="fullscreenToggle" onclick="toggleFullscreen()" title="Entrar en pantalla completa" aria-label="Alternar pantalla completa" aria-pressed="false">Pantalla Completa</button>
             </div>
-            <iframe id="viewer"></iframe>
+            <iframe id="viewer" allow="microphone *"></iframe>
         </div>
     </div>
     <footer>Virthub 1.0</footer>
@@ -472,6 +473,47 @@
 
             if (force || !iframe.src) {
                 iframe.src = '/contenedor/launch';
+            }
+        }
+
+        function getFullscreenElement() {
+            return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
+        }
+
+        function syncFullscreenButtonState() {
+            const button = document.getElementById('fullscreenToggle');
+            if (!button) return;
+
+            const isFullscreen = !!getFullscreenElement();
+            button.textContent = isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa';
+            button.title = isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa';
+            button.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+        }
+
+        async function toggleFullscreen() {
+            const target = document.querySelector('.container-main');
+            if (!target) return;
+
+            try {
+                if (!getFullscreenElement()) {
+                    if (target.requestFullscreen) {
+                        await target.requestFullscreen();
+                    } else if (target.webkitRequestFullscreen) {
+                        target.webkitRequestFullscreen();
+                    } else if (target.msRequestFullscreen) {
+                        target.msRequestFullscreen();
+                    }
+                } else if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            } catch (error) {
+                console.log('No se pudo cambiar a pantalla completa:', error);
+            } finally {
+                syncFullscreenButtonState();
             }
         }
 
@@ -939,6 +981,7 @@
         window.addEventListener('DOMContentLoaded', async () => {
             applySidebarState();
             applyThemeState();
+            syncFullscreenButtonState();
             loadInIframe();
             syncChatLayoutState();
             startGuestCountdown();
@@ -955,6 +998,10 @@
         document.addEventListener('click', () => {
             unlockChatNotificationAudio();
         }, { once: true });
+
+        document.addEventListener('fullscreenchange', syncFullscreenButtonState);
+        document.addEventListener('webkitfullscreenchange', syncFullscreenButtonState);
+        document.addEventListener('MSFullscreenChange', syncFullscreenButtonState);
     </script>
 </body>
 </html>
