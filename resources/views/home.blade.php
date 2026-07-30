@@ -202,49 +202,15 @@
     <link rel="stylesheet" href="{{ asset('container.css') }}?v={{ filemtime(public_path('container.css')) }}">
 </head>
 <body>
+    @include('partials.header', [
+        'pageTitle' => 'VirtHub',
+        'currentUser' => $currentUser ?? null,
+        'currentPage' => 'home'
+    ])
+
     <audio id="chatNotificationAudio" preload="auto" style="display: none;">
         <source src="{{ asset('sounds/chat-notificacion.mp3') }}" type="audio/mpeg">
     </audio>
-    <header>
-        <div class="header-controls">
-            <div class= "toggleable-sidebar" onclick="toggleMenu(event)" aria-label="Abrir menu" title="Menu">
-                <span class="menu-icon" aria-hidden="true"></span>
-                <div class="sidebar" onclick="event.stopPropagation()">
-                    @include('partials.navigation-menu', ['currentUser' => $currentUser ?? null, 'currentPage' => 'home'])
-                </div>
-            </div>
-            <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
-                <span class="theme-icon" aria-hidden="true"></span>
-            </div>
-        </div>
-
-        @if (!empty($currentUser))
-            @php
-                $headerProfileImage = (string) ($currentUser['profile_image_path'] ?? '');
-                $headerFrameColor = (string) ($currentUser['profile_frame_color'] ?? '#6ea8ff');
-                $headerInitial = strtoupper(substr((string) ($currentUser['username'] ?? 'U'), 0, 1));
-            @endphp
-            <div class="header-profile-dock toggleable-profile-menu" onclick="toggleProfileMenu(event)" title="Menu de perfil" aria-label="Menu de perfil">
-                <div class="profile-aero-frame profile-aero-frame-sm" style="--profile-frame-color: {{ $headerFrameColor }};">
-                    @if ($headerProfileImage !== '')
-                        <img src="{{ asset($headerProfileImage) }}" alt="Foto de perfil de {{ $currentUser['username'] }}" loading="lazy">
-                    @else
-                        <span>{{ $headerInitial }}</span>
-                    @endif
-                </div>
-                <div class="profile-menu" onclick="event.stopPropagation()">
-                    @if (($currentUser['role'] ?? 'guest') !== 'guest')
-                        <button type="button" onclick="location.href='{{ url('/configuracion') }}'">Configuracion</button>
-                    @endif
-                    <form method="POST" action="/logout">
-                        @csrf
-                        <button type="submit">Cerrar Sesion</button>
-                    </form>
-                </div>
-            </div>
-        @endif
-        <h1>VirtHub</h1>
-    </header>
 
     @include('partials.chat-widget')
 
@@ -311,7 +277,7 @@
             @endif
 
             @if (!empty($currentUser))
-                @if (($currentUser['role'] ?? 'user') === 'guest')
+                @if (($currentUser['role'] ?? 'guest') === 'guest')
                     <p class="auth-message auth-success" id="guestRemainingLabel" data-guest-remaining="{{ (int) ($guestRemainingSeconds ?? 0) }}">
                         Tiempo restante invitado: calculando...
                     </p>

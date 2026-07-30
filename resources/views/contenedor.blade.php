@@ -12,53 +12,13 @@
     <audio id="chatNotificationAudio" preload="auto" style="display: none;">
         <source src="{{ asset('sounds/chat-notificacion.mp3') }}" type="audio/mpeg">
     </audio>
-    <header>
-        <div class="header-controls">
-            <div class= "toggleable-sidebar" onclick="toggleMenu(event)" aria-label="Abrir menu" title="Menu">
-                <span class="menu-icon" aria-hidden="true"></span>
-                <div class="sidebar" onclick="event.stopPropagation()">
-                    @include('partials.navigation-menu', ['currentUser' => $currentUser ?? null, 'currentPage' => 'contenedor'])
-                </div>
-            </div>
-            <div class="chat-toggle" onclick="toggleChat()" id="chatToggle" title="Abrir chat" aria-label="Abrir chat">
-                <span class="chat-icon" aria-hidden="true"></span>
-            </div>
-            <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
-                <span class="theme-icon" aria-hidden="true"></span>
-            </div>
-        </div>
-        @if (!empty($currentUser))
-            @php
-                $headerProfileImage = (string) ($currentUser['profile_image_path'] ?? '');
-                $headerFrameColor = (string) ($currentUser['profile_frame_color'] ?? '#6ea8ff');
-                $headerInitial = strtoupper(substr((string) ($currentUser['username'] ?? 'U'), 0, 1));
-            @endphp
-            <div class="header-profile-dock toggleable-profile-menu" onclick="toggleProfileMenu(event)" title="Menu de perfil" aria-label="Menu de perfil">
-                <div class="profile-aero-frame profile-aero-frame-sm" style="--profile-frame-color: {{ $headerFrameColor }};">
-                    @if ($headerProfileImage !== '')
-                        <img src="{{ asset($headerProfileImage) }}" alt="Foto de perfil de {{ $currentUser['username'] }}" loading="lazy">
-                    @else
-                        <span>{{ $headerInitial }}</span>
-                    @endif
-                </div>
-                <div class="profile-menu" onclick="event.stopPropagation()">
-                    @if (($currentUser['role'] ?? 'guest') !== 'guest')
-                        <button type="button" onclick="location.href='{{ url('/configuracion') }}'">Configuracion</button>
-                    @endif
-                    <form method="POST" action="/logout">
-                        @csrf
-                        <button type="submit">Cerrar Sesion</button>
-                    </form>
-                </div>
-            </div>
-        @endif
-        <h1>Bienvenido {{ $currentUser['username'] ?? 'Usuario' }}</h1>
-        @if (($currentUser['role'] ?? 'user') === 'guest')
-            <p class="auth-message auth-success" id="guestRemainingLabel" data-guest-remaining="{{ (int) ($guestRemainingSeconds ?? 0) }}" style="max-width: 360px; margin: 0 auto 10px auto;">
-                Tiempo restante invitado: calculando...
-            </p>
-        @endif
-    </header>
+
+    @include('partials.header', [
+        'pageTitle' => (($currentUser['role'] ?? 'guest') === 'guest') ? 'Bienvenido Invitado' : 'Bienvenido ' . ($currentUser['username'] ?? 'Usuario'),
+        'currentUser' => $currentUser ?? null,
+        'currentPage' => 'contenedor'
+    ])
+
 
     <div class="container-wrapper">
         <div class="chat-panel" id="chatPanel">
@@ -122,13 +82,22 @@
 
         <div class="container-main">
             <div class="container-toolbar">
+                @if (($currentUser['role'] ?? 'user') === 'guest')
+                    <div class="guest-timer-toolbar">
+                        <p class="auth-message auth-success" id="guestRemainingLabel" data-guest-remaining="{{ (int) ($guestRemainingSeconds ?? 0) }}">
+                            Tiempo restante invitado: calculando...
+                        </p>
+                    </div>
+                @endif
                 <button type="button" class="container-load-btn" onclick="loadInIframe(true)">Recargar Contenedor</button>
                 <button type="button" class="container-load-btn" id="fullscreenToggle" onclick="toggleFullscreen()" title="Entrar en pantalla completa" aria-label="Alternar pantalla completa" aria-pressed="false">Pantalla Completa</button>
             </div>
             <iframe id="viewer" allow="microphone *"></iframe>
         </div>
     </div>
+
     <footer>Virthub 1.0</footer>
+    
     <script>
         const currentUserName = @json($currentUser['username'] ?? 'guest');
         const isGuestChatMode = @json((($currentUser['role'] ?? 'guest') === 'guest'));
