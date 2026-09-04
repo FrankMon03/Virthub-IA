@@ -91,7 +91,8 @@
                 @endif
 
                 <button type="button" class="container-load-btn chat-toggle" onclick="toggleChat()" id="chatToggle" title="Abrir chat" aria-label="Abrir chat">
-                    Chat
+                    <span class="chat-icon" aria-hidden="true"></span>
+                    <span class="chat-button-label">Chat</span>
                 </button>
 
                 <button type="button" class="container-load-btn" onclick="loadInIframe(true)">Recargar Contenedor</button>

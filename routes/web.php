@@ -3,6 +3,7 @@
 use App\Services\ChatStore;
 use App\Services\ForumStore;
 use App\Services\JsonUserStore;
+use App\Services\ProfileStore;
 use App\Services\UserWorkspaceStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -249,6 +250,30 @@ if (!function_exists('virthub_ollama_chat_username')) {
 	}
 }
 
+Route::get('/install', function (Request $request, JsonUserStore $users) {
+	$installComplete = $users->hasAdminAccount();
+
+	return view('install', [
+		'installComplete' => $installComplete,
+		'statusMessage' => session('status_message'),
+	]);
+});
+
+Route::post('/install', function (Request $request, JsonUserStore $users) {
+	if ($users->hasAdminAccount()) {
+		abort(403, 'La instalacion ya fue completada.');
+	}
+
+	$validated = $request->validate([
+		'admin_username' => ['required', 'string', 'max:50'],
+		'admin_password' => ['required', 'confirmed', 'min:8'],
+	]);
+
+	$users->createOrUpdateAdmin((string) $validated['admin_username'], (string) $validated['admin_password']);
+
+	return redirect('/')->with('status_message', 'Instalación completada. Ya puedes iniciar sesión con el administrador creado.');
+});
+
 Route::get('/', function (Request $request, JsonUserStore $users) {
 	$users->bootstrapAdminFromEnv();
 	$currentUser = virthub_active_user($request, $users);
@@ -317,6 +342,48 @@ Route::get('/foro', function (Request $request, JsonUserStore $users, ForumStore
 		'posts' => $forumStore->latestPosts(120),
 	]);
 });
+
+Route::get('/perfil/{username}', function (Request $request, string $username, JsonUserStore $users, ProfileStore $profileStore) {
+	$profile = $users->findPublicProfile($username);
+
+	if (!$profile) {
+		abort(404);
+	}
+
+	$currentUser = virthub_active_user($request, $users);
+	$profilePosts = $profileStore->latestPostsFor((string) $profile['username']);
+
+	return view('perfil', [
+		'currentUser' => $currentUser,
+		'profile' => $profile,
+		'profilePosts' => $profilePosts,
+		'isOwner' => $currentUser && ($currentUser['username'] ?? '') === ($profile['username'] ?? ''),
+	]);
+});
+
+Route::post('/perfil/{username}/publicar', function (Request $request, string $username, JsonUserStore $users, ProfileStore $profileStore) {
+	$currentUser = virthub_active_user($request, $users);
+
+	if (!$currentUser || ($currentUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion con usuario registrado para publicar en tu perfil.');
+	}
+
+	if ((string) ($currentUser['username'] ?? '') !== $username) {
+		abort(403, 'Solo puedes publicar en tu propio perfil.');
+	}
+
+	if (!$users->findPublicProfile($username)) {
+		abort(404);
+	}
+
+	$validated = $request->validate([
+		'content' => ['required', 'string', 'min:1', 'max:2000'],
+	]);
+
+	$profileStore->addPost($username, (string) $validated['content']);
+
+	return redirect('/perfil/' . rawurlencode($username))->with('success', 'Publicacion añadida a tu perfil.');
+})->middleware('throttle:30,1');
 
 Route::get('/sugerencias', function (Request $request, JsonUserStore $users) {
 	$users->bootstrapAdminFromEnv();

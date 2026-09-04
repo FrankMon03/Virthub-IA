@@ -9,7 +9,6 @@
         ['key' => 'sugerencias', 'label' => 'Sugerencias', 'url' => url('/sugerencias'), 'visible' => true],
         ['key' => 'contenedor', 'label' => 'Contenedor', 'url' => url('/contenedor'), 'visible' => $hasUser],
         ['key' => 'admin', 'label' => 'Admin', 'url' => url('/admin/users'), 'visible' => $userRole === 'admin'],
-        ['key' => 'github', 'label' => 'GitHub', 'url' => 'https://github.com/FrankMon03/Virthub-IA', 'visible' => true, 'external' => true],
     ];
 @endphp
 

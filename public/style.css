@@ -103,6 +103,125 @@ body:not(.dark-mode) {
     --vh-glass-drop-shadow: 0 10px 24px rgba(11, 30, 50, 0.26);
 }
 
+body.retro-mode {
+    --vh-body-bg: #008080;
+    --vh-page-overlay: none;
+    --vh-surface: #c0c0c0;
+    --vh-surface-strong: #d4d0c8;
+    --vh-border: #808080;
+    --vh-icon: #000000;
+    --vh-text: #000000;
+    --vh-text-soft: #222222;
+    --vh-button-bg: #c0c0c0;
+    --vh-button-hover: #d4d0c8;
+    --vh-panel-text: #000000;
+    --vh-glass-blur: 0;
+    --vh-glass-sheen: none;
+    --vh-glass-inner-shadow: none;
+    --vh-glass-drop-shadow: none;
+    background-color: #008080;
+    color: #000000;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+}
+
+body.retro-mode::before,
+body.retro-mode::after {
+    background-image: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 3px),
+        linear-gradient(135deg, #008080, #008080 50%, #007878);
+    background-color: #008080;
+    opacity: 1;
+}
+
+body.retro-mode::after {
+    display: none;
+}
+
+body.retro-mode header,
+body.retro-mode footer,
+body.retro-mode .linux-news-panel,
+body.retro-mode .login-screen,
+body.retro-mode .sidebar,
+body.retro-mode .profile-menu,
+body.retro-mode .toggleable-sidebar,
+body.retro-mode .theme-toggle,
+body.retro-mode .chat-toggle,
+body.retro-mode .container-load-btn,
+body.retro-mode .chat-panel,
+body.retro-mode .chat-header,
+body.retro-mode .chat-tabs,
+body.retro-mode .chat-input-area,
+body.retro-mode .chat-toast,
+body.retro-mode .forum-card,
+body.retro-mode .forum-post,
+body.retro-mode .suggestions-card,
+body.retro-mode .config-card,
+body.retro-mode .admin-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-image: none !important;
+    background-color: #c0c0c0 !important;
+    border: 2px outset #ffffff !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    text-shadow: none !important;
+}
+
+body.retro-mode header {
+    padding: 4px 6px;
+    margin: 2px 2px 5px;
+    min-height: 32px;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+}
+
+body.retro-mode header h1,
+body.retro-mode .navbar-link,
+body.retro-mode button,
+body.retro-mode input,
+body.retro-mode select,
+body.retro-mode textarea,
+body.retro-mode footer {
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+}
+
+body.retro-mode button,
+body.retro-mode .container-load-btn,
+body.retro-mode .theme-toggle,
+body.retro-mode .chat-toggle,
+body.retro-mode input,
+body.retro-mode select,
+body.retro-mode textarea {
+    border: 2px outset #ffffff !important;
+    border-radius: 0 !important;
+    background: #c0c0c0 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}
+
+body.retro-mode button:active,
+body.retro-mode .container-load-btn:active,
+body.retro-mode .theme-toggle:active,
+body.retro-mode .chat-toggle:active {
+    border-style: inset !important;
+}
+
+body.retro-mode .theme-toggle,
+body.retro-mode .chat-toggle {
+    width: 36px;
+    height: 30px;
+}
+
+body.retro-mode iframe {
+    border: 2px inset #ffffff !important;
+    background: #ffffff;
+}
+
+body.retro-mode footer {
+    padding: 4px 0;
+    bottom: 4px;
+    margin: 0 2px;
+}
+
 header,
 footer,
 .linux-news-panel,
@@ -272,6 +391,27 @@ header h1 {
 .theme-toggle:hover {
     background-color: var(--vh-button-hover);
     transform: translateY(-1px);
+}
+
+.retro-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 4px;
+    background-color: var(--vh-surface);
+    border: 1px solid var(--vh-border);
+    border-radius: 14px;
+    color: var(--vh-text);
+    font-family: Monocraft Nerd Font, monospace;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.retro-toggle:hover {
+    background-color: var(--vh-button-hover);
 }
 
 .chat-toggle {
@@ -1121,6 +1261,62 @@ header h1 {
     body {
         padding-left: 3%;
         padding-right: 3%;
+        overflow-x: hidden;
+    }
+
+    header {
+        margin: 0 0 5px;
+        padding: 12px 10px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    header .header-controls {
+        display: grid;
+        grid-template-columns: repeat(2, 44px);
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        margin: 0;
+        order: -1;
+    }
+
+    header .header-profile-dock {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        justify-self: center;
+        order: -1;
+    }
+
+    header h1 {
+        order: 0;
+        width: 100%;
+        overflow-wrap: anywhere;
+        text-align: center;
+    }
+
+    .navbar {
+        order: 1;
+        width: 100%;
+        padding: 0;
+        justify-content: center;
+    }
+
+    .header-controls {
+        order: -1;
+    }
+
+    .retro-toggle {
+        grid-column: 2;
+        grid-row: 2;
+        display: inline-flex;
+    }
+
+    .theme-toggle {
+        grid-column: 1;
+        grid-row: 2;
     }
 
     .header-controls {
@@ -1137,6 +1333,23 @@ header h1 {
     .home-panels {
         grid-template-columns: 1fr;
         min-height: auto;
+    }
+
+    .home-panels,
+    .gadget,
+    .linux-news-panel,
+    .login-screen,
+    .forum-shell,
+    .config-shell,
+    .profile-page,
+    .container-wrapper {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    footer {
+        left: 3%;
+        right: 3%;
     }
 
     .gadget,

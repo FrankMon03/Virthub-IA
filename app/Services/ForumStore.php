@@ -22,6 +22,16 @@ class ForumStore
         return array_slice($posts, 0, max(1, $limit));
     }
 
+    public function postsByAuthor(string $author, int $limit = 50): array
+    {
+        $author = trim($author);
+        $posts = array_values(array_filter($this->readPosts(), function (array $post) use ($author): bool {
+            return ($post['author'] ?? '') === $author;
+        }));
+
+        return array_slice(array_reverse($posts), 0, max(1, $limit));
+    }
+
     public function addPost(string $author, string $content, ?string $title = null, ?array $poll = null): array
     {
         $author = trim($author);

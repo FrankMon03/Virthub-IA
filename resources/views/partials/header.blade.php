@@ -5,6 +5,7 @@
         <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
             <span class="theme-icon" aria-hidden="true"></span>
         </div>
+        <button type="button" class="retro-toggle" onclick="toggleRetroMode()" id="retroToggle" title="Activar tema retro" aria-label="Activar tema retro">Retro</button>
         @if (!empty($currentUser))
             @php
                 $profileImage = (string) ($currentUser['profile_image_path'] ?? '');
@@ -21,6 +22,7 @@
                 </div>
                 <div class="profile-menu" onclick="event.stopPropagation()">
                     @if (($currentUser['role'] ?? 'guest') !== 'guest')
+                        <button type="button" onclick="location.href='{{ url('/perfil/' . rawurlencode((string) $currentUser['username'])) }}'">Mi Perfil</button>
                         <button type="button" onclick="location.href='{{ url('/configuracion') }}'">Configuracion</button>
                     @endif
                     <form method="POST" action="/logout">
@@ -32,3 +34,36 @@
         @endif
     </div>
 </header>
+
+<script>
+    (() => {
+        const retroStorageKey = 'virthub_retro_mode';
+        const secretSequence = 'win95';
+        let typedSequence = '';
+
+        function applyRetroMode(enabled) {
+            document.body.classList.toggle('retro-mode', enabled);
+            localStorage.setItem(retroStorageKey, enabled ? '1' : '0');
+        }
+
+        window.toggleRetroMode = () => {
+            applyRetroMode(!document.body.classList.contains('retro-mode'));
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyRetroMode(localStorage.getItem(retroStorageKey) === '1');
+        });
+
+        document.addEventListener('keydown', event => {
+            if (event.target.matches('input, textarea, select, [contenteditable="true"]')) {
+                return;
+            }
+
+            typedSequence = (typedSequence + event.key.toLowerCase()).slice(-secretSequence.length);
+            if (typedSequence === secretSequence) {
+                window.toggleRetroMode();
+                typedSequence = '';
+            }
+        });
+    })();
+</script>

@@ -609,7 +609,7 @@
                             $hasPoll = $pollQuestion !== '' && count($pollOptions) >= 2;
                         @endphp
                         <h4>{{ $post['title'] ?: 'Publicacion sin titulo' }}</h4>
-                        <span class="forum-post-meta">{{ $post['author'] ?? 'usuario' }} | {{ $post['created_at'] ?? '-' }}</span>
+                        <span class="forum-post-meta"><a href="{{ url('/perfil/' . rawurlencode((string) ($post['author'] ?? 'usuario'))) }}">{{ $post['author'] ?? 'usuario' }}</a> | {{ $post['created_at'] ?? '-' }}</span>
                         <div>{!! nl2br(e($post['content'] ?? '')) !!}</div>
 
                         @if (!empty($post['image_path']))

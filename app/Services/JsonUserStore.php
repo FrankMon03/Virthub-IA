@@ -15,14 +15,18 @@ class JsonUserStore
         $this->filePath = storage_path('app/data/users.json');
     }
 
-    public function bootstrapAdminFromEnv(): void
+    public function bootstrapAdminFromEnv(bool $createIfMissing = false): void
     {
+        if (!$createIfMissing) {
+            return;
+        }
+
         $adminUsername = (string) env('ADMIN_USERNAME', 'admin');
         $adminPassword = (string) env('ADMIN_PASSWORD', 'ChangeMeNow123!');
 
 		$this->updateUsers(function (array &$users) use ($adminUsername, $adminPassword): void {
 			foreach ($users as $user) {
-				if (($user['role'] ?? '') === 'admin' && ($user['username'] ?? '') === $adminUsername) {
+                if (($user['role'] ?? '') === 'admin' && ($user['username'] ?? '') === $adminUsername) {
 					return;
 				}
 			}
@@ -40,6 +44,66 @@ class JsonUserStore
 				'last_seen_at' => null,
 			];
 		});
+    }
+
+    public function hasAdminAccount(): bool
+    {
+        foreach ($this->readUsers() as $user) {
+            if (($user['role'] ?? '') === 'admin') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function createOrUpdateAdmin(string $username, string $password): array
+    {
+        $username = trim($username);
+
+        if ($username === '') {
+            throw new RuntimeException('El username de administrador no puede estar vacio.');
+        }
+
+        if ($password === '') {
+            throw new RuntimeException('La contraseña de administrador no puede estar vacia.');
+        }
+
+        return $this->updateUsers(function (array &$users) use ($username, $password): array {
+            foreach ($users as &$user) {
+                if (($user['username'] ?? '') === $username) {
+                    $user['password_hash'] = Hash::make($password);
+                    $user['role'] = 'admin';
+                    $user['is_active'] = true;
+
+                    return [
+                        'username' => $username,
+                        'role' => 'admin',
+                    ];
+                }
+            }
+            unset($user);
+
+            $record = [
+                'id' => Str::uuid()->toString(),
+                'username' => $username,
+                'password_hash' => Hash::make($password),
+                'role' => 'admin',
+                'is_active' => true,
+                'profile_image_path' => null,
+                'profile_frame_color' => '#6ea8ff',
+                'created_at' => now()->toDateTimeString(),
+                'last_login_at' => null,
+                'last_seen_at' => null,
+            ];
+
+            $users[] = $record;
+
+            return [
+                'username' => $record['username'],
+                'role' => 'admin',
+            ];
+        });
     }
 
     public function allPublicUsers(): array
@@ -70,6 +134,23 @@ class JsonUserStore
         }
 
         return null;
+    }
+
+    public function findPublicProfile(string $username): ?array
+    {
+        $user = $this->findByUsername($username);
+
+        if (!$user || !($user['is_active'] ?? true)) {
+            return null;
+        }
+
+        return [
+            'username' => (string) ($user['username'] ?? ''),
+            'role' => (string) ($user['role'] ?? 'user'),
+            'profile_image_path' => $user['profile_image_path'] ?? null,
+            'profile_frame_color' => $user['profile_frame_color'] ?? '#6ea8ff',
+            'created_at' => $user['created_at'] ?? null,
+        ];
     }
 
     public function verifyCredentials(string $username, string $password): ?array
