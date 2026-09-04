@@ -2,6 +2,12 @@
     <h1>{{ $pageTitle ?? 'VirtHub' }}</h1>
     @include('partials.navigation-menu', ['currentUser' => $currentUser ?? null, 'currentPage' => $currentPage ?? 'home'])
     <div class="header-controls">
+        @if (!empty($currentUser) && ($currentUser['role'] ?? 'guest') !== 'guest')
+            <form method="GET" action="{{ url('/buscar-amigos') }}" class="header-friend-search" role="search">
+                <input type="search" name="q" placeholder="Buscar amigos" aria-label="Buscar amigos">
+                <button type="submit" title="Buscar amigos" aria-label="Buscar amigos">⌕</button>
+            </form>
+        @endif
         <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
             <span class="theme-icon" aria-hidden="true"></span>
         </div>

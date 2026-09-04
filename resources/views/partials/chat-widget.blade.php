@@ -222,6 +222,68 @@
             max-width: min(390px, calc(100vw - 86px));
         }
 
+        .chat-friend-requests {
+            margin: 8px;
+            padding: 8px;
+            border: 1px solid var(--vh-border);
+            background: rgba(70, 105, 150, 0.18);
+        }
+
+        .chat-conversation-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--vh-border);
+            background: rgba(70, 105, 150, 0.18);
+            color: var(--vh-text);
+            font-size: 12px;
+        }
+
+        .chat-conversation-header span {
+            color: var(--vh-text-soft);
+        }
+
+        .chat-friend-requests-title {
+            margin-bottom: 6px;
+            color: var(--vh-text);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .chat-friend-request-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 0;
+            border-top: 1px solid var(--vh-border);
+        }
+
+        .chat-friend-request-name {
+            min-width: 0;
+            color: var(--vh-text);
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .chat-friend-request-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .chat-friend-request-button {
+            padding: 4px 6px;
+            border: 1px solid var(--vh-border);
+            background: var(--vh-button-bg);
+            color: var(--vh-text);
+            font: 11px Monocraft Nerd Font, monospace;
+            cursor: pointer;
+        }
+
         @media (max-width: 768px) {
             .global-chat-widget {
                 right: 8px;
@@ -275,6 +337,7 @@
                 @if (!$isGuestChat)
                 <button type="button" class="chat-tab-btn active" onclick="switchChatTab('messages')" data-tab="messages">Mensajes</button>
                 <button type="button" class="chat-tab-btn" onclick="switchChatTab('users')" data-tab="users">Usuarios</button>
+                <button type="button" class="chat-tab-btn" onclick="switchChatTab('friendRequests')" data-tab="friendRequests">Solicitudes</button>
                 <button type="button" class="chat-tab-btn" onclick="switchChatTab('broadcast')" data-tab="broadcast">Anuncios</button>
                 @else
                 <button type="button" class="chat-tab-btn active" onclick="switchChatTab('broadcast')" data-tab="broadcast">Anuncios</button>
@@ -283,12 +346,23 @@
 
             @if (!$isGuestChat)
             <div id="messagesView" class="chat-view active">
+                <div class="chat-conversation-header" id="chatConversationHeader" hidden>
+                    <strong id="chatConversationName"></strong>
+                    <span id="chatConversationStatus"></span>
+                </div>
                 <div class="chat-messages" id="chatMessages">
                     <p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Sin mensajes aún. Selecciona un usuario.</p>
                 </div>
                 <div class="chat-input-area">
                     <input type="text" id="chatInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter') sendChatMessage();">
                     <button type="button" onclick="sendChatMessage()" class="chat-send-btn">Enviar</button>
+                </div>
+            </div>
+
+            <div id="friendRequestsView" class="chat-view">
+                <div class="chat-friend-requests" id="chatFriendRequests">
+                    <div class="chat-friend-requests-title">Solicitudes de amistad</div>
+                    <div id="chatFriendRequestsList"></div>
                 </div>
             </div>
 

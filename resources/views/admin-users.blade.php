@@ -830,6 +830,11 @@
             <form method="POST" action="/admin/users">
                 @csrf
                 <label>
+                    Nombre visible
+                    <input type="text" name="name" value="{{ old('name') }}" maxlength="80" placeholder="ej: Frank Garcia">
+                </label>
+
+                <label>
                     Username (opcional si aleatorio)
                     <input type="text" name="username" value="{{ old('username') }}" placeholder="ej: frank_user">
                 </label>

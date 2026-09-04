@@ -351,8 +351,8 @@
                     profile_image_path: user.profile_image_path || null,
                     profile_frame_color: user.profile_frame_color || '#6ea8ff',
                     is_active: accountActive,
-                    presence_status: user.presence_status || (accountActive ? 'online' : 'offline'),
-                    role: user.role || 'user'
+                    name: user.name || user.username,
+                    presence_status: user.presence_status || (accountActive ? 'online' : 'offline')
                 };
             });
 
@@ -381,7 +381,7 @@
 
                 const name = document.createElement('span');
                 name.className = 'chat-user-name';
-                name.textContent = user.username;
+                name.textContent = user.name || user.username;
                 main.appendChild(name);
 
                 const status = document.createElement('span');
@@ -389,22 +389,74 @@
                 status.title = isOnline ? 'Conectado recientemente' : 'Desconectado';
                 main.appendChild(status);
 
-                const right = document.createElement('div');
-                right.style.display = 'flex';
-                right.style.alignItems = 'center';
-                right.style.gap = '6px';
-
-                const badge = document.createElement('span');
-                badge.className = 'chat-user-badge';
-                badge.textContent = user.role || 'user';
-                right.appendChild(badge);
-
                 item.appendChild(main);
-                item.appendChild(right);
                 list.appendChild(item);
             });
         } catch (error) {
             list.innerHTML = '<p style="text-align:center;color:var(--vh-text-soft);font-size:12px;padding:20px 10px;">' + error.message + '</p>';
+        }
+    }
+
+    async function loadFriendRequests() {
+        const panel = document.getElementById('chatFriendRequests');
+        const list = document.getElementById('chatFriendRequestsList');
+        if (!panel || !list || isBroadcastOnly) return;
+
+        try {
+            const res = await apiFetch('/chat/friend-requests');
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload.error || 'No se pudieron cargar las solicitudes');
+
+            const requests = payload.requests || [];
+            list.innerHTML = '';
+
+            if (requests.length === 0) {
+                list.textContent = 'No tienes solicitudes pendientes.';
+                return;
+            }
+
+            requests.forEach(friendRequest => {
+                const item = document.createElement('div');
+                item.className = 'chat-friend-request-item';
+
+                const sender = document.createElement('span');
+                sender.className = 'chat-friend-request-name';
+                sender.textContent = friendRequest.name || friendRequest.from || 'Usuario';
+
+                const actions = document.createElement('div');
+                actions.className = 'chat-friend-request-actions';
+                ['accepted', 'declined'].forEach(status => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'chat-friend-request-button';
+                    button.textContent = status === 'accepted' ? 'Aceptar' : 'Rechazar';
+                    button.addEventListener('click', () => respondToFriendRequest(friendRequest.id, status));
+                    actions.appendChild(button);
+                });
+
+                item.appendChild(sender);
+                item.appendChild(actions);
+                list.appendChild(item);
+            });
+        } catch (error) {
+            panel.hidden = false;
+            list.textContent = error.message;
+        }
+    }
+
+    async function respondToFriendRequest(requestId, status) {
+        try {
+            const res = await apiFetch('/chat/friend-requests/' + encodeURIComponent(requestId), {
+                method: 'POST',
+                body: JSON.stringify({ status })
+            });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload.error || 'No se pudo responder la solicitud');
+
+            await loadFriendRequests();
+            if (status === 'accepted') await loadUsersList();
+        } catch (error) {
+            alert(error.message);
         }
     }
 
@@ -465,6 +517,8 @@
         currentChatUser = username;
         await switchChatTab('messages');
 
+        updateConversationHeader(username);
+
         const box = document.getElementById('chatMessages');
         if (!box) return;
         box.innerHTML = '<p style="text-align:center;color:var(--vh-text-soft);font-size:12px;padding:20px 10px;">Cargando mensajes...</p>';
@@ -475,6 +529,20 @@
         } catch (error) {
             box.innerHTML = '<p style="text-align:center;color:var(--vh-text-soft);font-size:12px;padding:20px 10px;">' + error.message + '</p>';
         }
+    }
+
+    function updateConversationHeader(username) {
+        const header = document.getElementById('chatConversationHeader');
+        const name = document.getElementById('chatConversationName');
+        const status = document.getElementById('chatConversationStatus');
+        if (!header || !name || !status) return;
+
+        const profile = profileFor(username);
+        const isOnline = profile.presence_status === 'online';
+        name.textContent = profile.name || username;
+        status.textContent = isOnline ? 'Conectado' : 'Desconectado';
+        status.style.color = isOnline ? '#69d391' : 'var(--vh-text-soft)';
+        header.hidden = false;
     }
 
     async function sendChatMessage() {
@@ -538,6 +606,7 @@
         if (view) view.classList.add('active');
 
         if (tab === 'users') await loadUsersList();
+        if (tab === 'friendRequests') await loadFriendRequests();
         if (tab === 'broadcast') await loadBroadcastMessages();
     }
 
@@ -560,6 +629,7 @@
         setInterval(async () => {
             try {
                 await sendPresenceHeartbeat();
+                if (!isBroadcastOnly) await loadFriendRequests();
 
                 const shouldNotify = notificationsPrimed;
 

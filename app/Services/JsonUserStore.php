@@ -112,6 +112,8 @@ class JsonUserStore
 
         return array_map(function (array $user): array {
             return [
+                'id' => (string) ($user['id'] ?? ''),
+                'name' => (string) ($user['name'] ?? $user['username'] ?? ''),
                 'username' => $user['username'] ?? '',
                 'role' => $user['role'] ?? 'user',
                 'last_login_at' => $user['last_login_at'] ?? null,
@@ -136,6 +138,23 @@ class JsonUserStore
         return null;
     }
 
+    public function findByLoginIdentifier(string $identifier): ?array
+    {
+        $identifier = trim($identifier);
+        $normalizedIdentifier = mb_strtolower($identifier);
+
+        foreach ($this->readUsers() as $user) {
+            $username = (string) ($user['username'] ?? '');
+            $userId = (string) ($user['id'] ?? '');
+
+            if ($username === $identifier || $userId === $identifier || mb_strtolower($username) === $normalizedIdentifier) {
+                return $user;
+            }
+        }
+
+        return null;
+    }
+
     public function findPublicProfile(string $username): ?array
     {
         $user = $this->findByUsername($username);
@@ -145,6 +164,8 @@ class JsonUserStore
         }
 
         return [
+            'id' => (string) ($user['id'] ?? ''),
+            'name' => (string) ($user['name'] ?? $user['username'] ?? ''),
             'username' => (string) ($user['username'] ?? ''),
             'role' => (string) ($user['role'] ?? 'user'),
             'profile_image_path' => $user['profile_image_path'] ?? null,
@@ -155,7 +176,7 @@ class JsonUserStore
 
     public function verifyCredentials(string $username, string $password): ?array
     {
-        $user = $this->findByUsername($username);
+        $user = $this->findByLoginIdentifier($username);
 
         if (!$user) {
             return null;
@@ -202,15 +223,20 @@ class JsonUserStore
         });
     }
 
-    public function createUser(string $username, string $password, string $role = 'user'): array
+    public function createUser(string $username, string $password, string $role = 'user', ?string $name = null): array
     {
         $username = trim($username);
+        $name = trim((string) ($name ?? $username));
 
         if ($username === '') {
             throw new RuntimeException('El username no puede estar vacio.');
         }
 
-        return $this->updateUsers(function (array &$users) use ($username, $password, $role): array {
+        if ($name === '') {
+            $name = $username;
+        }
+
+        return $this->updateUsers(function (array &$users) use ($username, $password, $role, $name): array {
             foreach ($users as $user) {
                 if (($user['username'] ?? '') === $username) {
                     throw new RuntimeException('Ese username ya existe.');
@@ -219,6 +245,7 @@ class JsonUserStore
 
             $record = [
                 'id' => Str::uuid()->toString(),
+                'name' => $name,
                 'username' => $username,
                 'password_hash' => Hash::make($password),
                 'role' => $role === 'admin' ? 'admin' : 'user',
@@ -233,10 +260,33 @@ class JsonUserStore
             $users[] = $record;
 
             return [
+                'id' => $record['id'],
+                'name' => $record['name'],
                 'username' => $record['username'],
                 'role' => $record['role'],
             ];
         });
+    }
+
+    public function searchPublicUsers(string $query, int $limit = 30): array
+    {
+        $query = mb_strtolower(trim($query));
+
+        if ($query === '') {
+            return [];
+        }
+
+        $matches = array_filter($this->allPublicUsers(), static function (array $user) use ($query): bool {
+            foreach (['name', 'id', 'username'] as $field) {
+                if (str_contains(mb_strtolower((string) ($user[$field] ?? '')), $query)) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+
+        return array_slice(array_values($matches), 0, max(1, $limit));
     }
 
     public function updatePassword(string $username, string $newPassword): void

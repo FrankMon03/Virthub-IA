@@ -521,6 +521,20 @@
             }
         }
 
+        function animateHomeGadgetResize(gadget) {
+            if (!gadget || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+            gadget.getAnimations().forEach(animation => animation.cancel());
+            gadget.animate(
+                [
+                    { filter: 'brightness(1) saturate(100%)', boxShadow: '0 0 0 rgba(170, 224, 255, 0)' },
+                    { filter: 'brightness(1.1) saturate(112%)', boxShadow: '0 0 24px rgba(170, 224, 255, 0.28)' },
+                    { filter: 'brightness(1) saturate(100%)', boxShadow: '0 0 0 rgba(170, 224, 255, 0)' },
+                ],
+                { duration: 360, easing: 'cubic-bezier(0.22, 0.9, 0.2, 1)' }
+            );
+        }
+
         function saveGadgetSizes() {
             if (!canCustomizeHome()) return;
 
@@ -580,7 +594,9 @@
             const current = gadget.dataset.gadgetSize || 'normal';
             const index = sizes.indexOf(current);
             const next = sizes[(index >= 0 ? index + 1 : 0) % sizes.length];
-            setHomeGadgetSize(gadget, next);
+            const board = document.getElementById('gadgetBoard');
+            animateGadgetReflow(board, () => setHomeGadgetSize(gadget, next));
+            animateHomeGadgetResize(gadget);
             saveGadgetSizes();
         }
 
@@ -1621,6 +1637,20 @@
         loadNews('/cyber-news', 'cyber-news-list');
         window.addEventListener('DOMContentLoaded', applySidebarState);
         window.addEventListener('DOMContentLoaded', applyThemeState);
+        window.addEventListener('DOMContentLoaded', () => {
+            const board = document.getElementById('gadgetBoard');
+            if (!board) return;
+
+            board.classList.add('is-loading');
+            board.querySelectorAll('.gadget').forEach((gadget, index) => {
+                gadget.style.setProperty('--gadget-entry-delay', `${index * 70}ms`);
+            });
+
+            requestAnimationFrame(() => {
+                board.classList.remove('is-loading');
+                board.classList.add('is-ready');
+            });
+        });
         window.addEventListener('DOMContentLoaded', applySavedGadgetOrder);
         window.addEventListener('DOMContentLoaded', applySavedGadgetSizes);
         window.addEventListener('DOMContentLoaded', enableHomeGadgetDnD);

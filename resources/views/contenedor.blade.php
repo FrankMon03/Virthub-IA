@@ -31,6 +31,7 @@
                 @if (($currentUser['role'] ?? 'guest') !== 'guest')
                 <button type="button" class="chat-tab-btn active" onclick="switchChatTab('messages')" data-tab="messages">Mensajes</button>
                 <button type="button" class="chat-tab-btn" onclick="switchChatTab('users')" data-tab="users">Usuarios</button>
+                <button type="button" class="chat-tab-btn" onclick="switchChatTab('friendRequests')" data-tab="friendRequests">Solicitudes</button>
                 @if (($currentUser['role'] ?? 'user') === 'admin')
                 <button type="button" class="chat-tab-btn" onclick="openOllamaChat()" data-tab="ollama">IA</button>
                 @endif
@@ -54,6 +55,12 @@
             <div id="usersView" class="chat-view">
                 <div class="chat-users-list" id="chatUsersList">
                     <p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando usuarios...</p>
+                </div>
+            </div>
+
+            <div id="friendRequestsView" class="chat-view">
+                <div class="chat-messages" id="chatFriendRequestsList">
+                    <p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando solicitudes...</p>
                 </div>
             </div>
 
@@ -571,6 +578,10 @@
                 await loadUsersList();
             }
 
+            if (tab === 'friendRequests') {
+                await loadFriendRequests();
+            }
+
             if (tab === 'broadcast') {
                 await loadBroadcastMessages();
             }
@@ -661,7 +672,7 @@
 
                     const name = document.createElement('span');
                     name.className = 'chat-user-name';
-                    name.textContent = user.username;
+                    name.textContent = user.name || user.username;
                     main.appendChild(name);
 
                     const status = document.createElement('span');
@@ -669,22 +680,76 @@
                     status.title = isOnline ? 'Conectado recientemente' : 'Desconectado';
                     main.appendChild(status);
 
-                    const right = document.createElement('div');
-                    right.style.display = 'flex';
-                    right.style.alignItems = 'center';
-                    right.style.gap = '6px';
-
-                    const badge = document.createElement('span');
-                    badge.className = 'chat-user-badge';
-                    badge.textContent = user.role || 'user';
-                    right.appendChild(badge);
-
                     item.appendChild(main);
-                    item.appendChild(right);
                     list.appendChild(item);
                 });
             } catch (error) {
                 list.innerHTML = `<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">${error.message}</p>`;
+            }
+        }
+
+        async function loadFriendRequests() {
+            const list = document.getElementById('chatFriendRequestsList');
+            if (!list || isGuestChatMode) return;
+
+            list.innerHTML = '<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">Cargando solicitudes...</p>';
+
+            try {
+                const response = await apiFetch('/chat/friend-requests');
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar las solicitudes');
+
+                const requests = payload.requests || [];
+                list.innerHTML = '';
+
+                if (requests.length === 0) {
+                    list.innerHTML = '<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">No tienes solicitudes pendientes.</p>';
+                    return;
+                }
+
+                requests.forEach(friendRequest => {
+                    const item = document.createElement('div');
+                    item.className = 'chat-user-item';
+
+                    const name = document.createElement('span');
+                    name.className = 'chat-user-name';
+                    name.textContent = friendRequest.name || friendRequest.from || 'Usuario';
+
+                    const actions = document.createElement('div');
+                    actions.style.display = 'flex';
+                    actions.style.gap = '6px';
+
+                    ['accepted', 'declined'].forEach(status => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'chat-send-btn';
+                        button.textContent = status === 'accepted' ? 'Aceptar' : 'Rechazar';
+                        button.addEventListener('click', () => respondToFriendRequest(friendRequest.id, status));
+                        actions.appendChild(button);
+                    });
+
+                    item.appendChild(name);
+                    item.appendChild(actions);
+                    list.appendChild(item);
+                });
+            } catch (error) {
+                list.innerHTML = `<p style="text-align: center; color: var(--vh-text-soft); font-size: 12px; padding: 20px 10px;">${error.message}</p>`;
+            }
+        }
+
+        async function respondToFriendRequest(requestId, status) {
+            try {
+                const response = await apiFetch(`/chat/friend-requests/${encodeURIComponent(requestId)}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status })
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.error || 'No se pudo responder la solicitud');
+
+                await loadFriendRequests();
+                if (status === 'accepted') await loadUsersList();
+            } catch (error) {
+                alert(error.message);
             }
         }
 

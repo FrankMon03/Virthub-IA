@@ -305,6 +305,30 @@ header h1 {
     margin-left: auto;
 }
 
+.header-friend-search {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.header-friend-search input {
+    width: 150px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--vh-border);
+    background: var(--vh-button-bg);
+    color: var(--vh-text);
+    font: 12px Monocraft Nerd Font, monospace;
+}
+
+.header-friend-search button {
+    padding: 5px 8px;
+    border: 1px solid var(--vh-border);
+    background: var(--vh-button-bg);
+    color: var(--vh-text);
+    cursor: pointer;
+}
+
 .header-profile-dock {
     position: relative;
     display: flex;
@@ -738,6 +762,62 @@ header h1 {
     min-width: 0;
     transition: grid-column 0.25s ease, min-height 0.25s ease, transform 0.24s ease, opacity 0.2s ease, box-shadow 0.24s ease, filter 0.24s ease;
     will-change: transform, opacity;
+}
+
+.home-panels.is-loading .gadget {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    filter: blur(3px);
+}
+
+.home-panels.is-ready .gadget {
+    animation: aero-gadget-in 0.58s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+    animation-delay: var(--gadget-entry-delay, 0ms);
+}
+
+.gadget.is-resizing {
+    animation: aero-gadget-resize 0.34s cubic-bezier(0.22, 0.9, 0.2, 1);
+    z-index: 3;
+}
+
+@keyframes aero-gadget-in {
+    0% {
+        opacity: 0;
+        transform: translateY(14px) scale(0.985);
+        filter: blur(3px) saturate(88%);
+    }
+    65% {
+        opacity: 1;
+        transform: translateY(-2px) scale(1.002);
+        filter: blur(0) saturate(108%);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0) saturate(100%);
+    }
+}
+
+@keyframes aero-gadget-resize {
+    0% {
+        filter: brightness(1) saturate(100%);
+        box-shadow: 0 0 0 rgba(170, 224, 255, 0);
+    }
+    45% {
+        filter: brightness(1.1) saturate(112%);
+        box-shadow: 0 0 24px rgba(170, 224, 255, 0.28);
+    }
+    100% {
+        filter: brightness(1) saturate(100%);
+        box-shadow: 0 0 0 rgba(170, 224, 255, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-panels.is-ready .gadget,
+    .gadget.is-resizing {
+        animation: none;
+    }
 }
 
 .gadget.dragging {
@@ -1288,6 +1368,16 @@ header h1 {
         grid-row: 1;
         justify-self: center;
         order: -1;
+    }
+
+    header .header-friend-search {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        width: 100%;
+    }
+
+    header .header-friend-search input {
+        width: 100%;
     }
 
     header h1 {

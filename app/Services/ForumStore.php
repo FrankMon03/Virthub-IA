@@ -32,7 +32,7 @@ class ForumStore
         return array_slice(array_reverse($posts), 0, max(1, $limit));
     }
 
-    public function addPost(string $author, string $content, ?string $title = null, ?array $poll = null): array
+    public function addPost(string $author, string $content, ?string $title = null, ?array $poll = null, array $attachments = []): array
     {
         $author = trim($author);
         $content = trim($content);
@@ -46,7 +46,11 @@ class ForumStore
             throw new RuntimeException('El contenido del post no puede estar vacio.');
         }
 
-        return $this->updatePosts(function (array &$posts) use ($author, $content, $title, $poll): array {
+        $attachments = array_values(array_filter($attachments, static function ($attachment): bool {
+            return is_array($attachment) && trim((string) ($attachment['path'] ?? '')) !== '';
+        }));
+
+        return $this->updatePosts(function (array &$posts) use ($author, $content, $title, $poll, $attachments): array {
             $pollRecord = null;
             if (is_array($poll)) {
                 $question = trim((string) ($poll['question'] ?? ''));
@@ -81,6 +85,7 @@ class ForumStore
                 'title' => $title,
                 'content' => $content,
                 'image_path' => null,
+                'attachments' => $attachments,
                 'poll' => $pollRecord,
                 'reactions' => [],
                 'comments' => [],

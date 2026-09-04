@@ -2,6 +2,7 @@
 
 use App\Services\ChatStore;
 use App\Services\ForumStore;
+use App\Services\FriendStore;
 use App\Services\JsonUserStore;
 use App\Services\ProfileStore;
 use App\Services\UserWorkspaceStore;
@@ -343,7 +344,85 @@ Route::get('/foro', function (Request $request, JsonUserStore $users, ForumStore
 	]);
 });
 
-Route::get('/perfil/{username}', function (Request $request, string $username, JsonUserStore $users, ProfileStore $profileStore) {
+Route::get('/buscar-amigos', function (Request $request, JsonUserStore $users, FriendStore $friends) {
+	$users->bootstrapAdminFromEnv();
+	$currentUser = virthub_active_user($request, $users);
+
+	if (!$currentUser || ($currentUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para buscar amigos.');
+	}
+
+	$query = trim((string) $request->query('q', ''));
+	$currentUsername = (string) $currentUser['username'];
+	$results = $query === '' ? [] : $users->searchPublicUsers($query);
+	$results = array_map(function (array $user) use ($friends, $currentUsername): array {
+		$user['friendship'] = $friends->statusBetween($currentUsername, (string) ($user['username'] ?? ''));
+		return $user;
+	}, $results);
+	$pendingRequests = $friends->pendingFor($currentUsername);
+	$pendingRequests = array_map(function (array $request) use ($users): array {
+		$request['sender'] = $users->findPublicProfile((string) ($request['from'] ?? ''));
+		return $request;
+	}, $pendingRequests);
+
+	return view('buscar-amigos', [
+		'currentUser' => $currentUser,
+		'query' => $query,
+		'results' => $results,
+		'pendingRequests' => $pendingRequests,
+	]);
+});
+
+Route::post('/amistad/solicitud', function (Request $request, JsonUserStore $users, FriendStore $friends) {
+	$currentUser = virthub_active_user($request, $users);
+
+	if (!$currentUser || ($currentUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para enviar solicitudes de amistad.');
+	}
+
+	$validated = $request->validate([
+		'username' => ['required', 'string', 'max:80'],
+	]);
+	$targetUsername = trim((string) $validated['username']);
+	$target = $users->findByUsername($targetUsername);
+
+	if (!$target || !($target['is_active'] ?? true)) {
+		return redirect('/buscar-amigos')->with('error', 'Ese usuario no existe o esta inactivo.');
+	}
+
+	try {
+		$friends->sendRequest((string) $currentUser['username'], $targetUsername);
+		return redirect('/buscar-amigos?q=' . rawurlencode($targetUsername))->with('success', 'Solicitud de amistad enviada.');
+	} catch (RuntimeException $e) {
+		return redirect('/buscar-amigos?q=' . rawurlencode($targetUsername))->with('error', $e->getMessage());
+	}
+})->middleware('throttle:30,1');
+
+Route::post('/amistad/responder', function (Request $request, JsonUserStore $users, FriendStore $friends) {
+	$currentUser = virthub_active_user($request, $users);
+
+	if (!$currentUser || ($currentUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para responder solicitudes.');
+	}
+
+	$validated = $request->validate([
+		'request_id' => ['required', 'string'],
+		'status' => ['required', 'in:accepted,declined'],
+	]);
+
+	try {
+		$friends->respondToRequest(
+			(string) $validated['request_id'],
+			(string) $currentUser['username'],
+			(string) $validated['status']
+		);
+		return redirect('/buscar-amigos')->with('success', $validated['status'] === 'accepted' ? 'Solicitud aceptada.' : 'Solicitud rechazada.');
+	} catch (RuntimeException $e) {
+		return redirect('/buscar-amigos')->with('error', $e->getMessage());
+	}
+});
+
+Route::get('/perfil/{username}', function (Request $request, string $username, JsonUserStore $users, ProfileStore $profileStore, ForumStore $forumStore, FriendStore $friends) {
 	$profile = $users->findPublicProfile($username);
 
 	if (!$profile) {
@@ -351,12 +430,23 @@ Route::get('/perfil/{username}', function (Request $request, string $username, J
 	}
 
 	$currentUser = virthub_active_user($request, $users);
-	$profilePosts = $profileStore->latestPostsFor((string) $profile['username']);
+	$friendship = $currentUser && ($currentUser['role'] ?? 'guest') !== 'guest'
+		? $friends->statusBetween((string) $currentUser['username'], (string) $profile['username'])
+		: null;
+	$profilePosts = array_merge(
+		$profileStore->latestPostsFor((string) $profile['username']),
+		$forumStore->postsByAuthor((string) $profile['username'])
+	);
+	usort($profilePosts, static function (array $first, array $second): int {
+		return strcmp((string) ($second['created_at'] ?? ''), (string) ($first['created_at'] ?? ''));
+	});
+	$profilePosts = array_slice($profilePosts, 0, 100);
 
 	return view('perfil', [
 		'currentUser' => $currentUser,
 		'profile' => $profile,
 		'profilePosts' => $profilePosts,
+		'friendship' => $friendship,
 		'isOwner' => $currentUser && ($currentUser['username'] ?? '') === ($profile['username'] ?? ''),
 	]);
 });
@@ -478,18 +568,21 @@ Route::post('/foro', function (Request $request, JsonUserStore $users, ForumStor
 	$validated = $request->validate([
 		'title' => 'nullable|string|max:120',
 		'content' => 'required|string|max:5000',
-		'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:5120',
+		'photos' => 'nullable|array|max:10',
+		'photos.*' => 'image|mimes:jpg,jpeg,png,webp,gif|max:5242880',
+		'videos' => 'nullable|array|max:5',
+		'videos.*' => 'file|mimes:mp4,webm,mov,avi|max:5242880',
+		'files' => 'nullable|array|max:10',
+		'files.*' => 'file|max:5242880',
 		'poll_question' => 'nullable|string|max:180',
-		'poll_option_1' => 'nullable|string|max:120',
-		'poll_option_2' => 'nullable|string|max:120',
-		'poll_option_3' => 'nullable|string|max:120',
-		'poll_option_4' => 'nullable|string|max:120',
+		'poll_options' => 'nullable|array|max:10',
+		'poll_options.*' => 'nullable|string|max:120',
 	]);
 
 	$pollQuestion = trim((string) ($validated['poll_question'] ?? ''));
 	$pollOptions = [];
-	foreach (['poll_option_1', 'poll_option_2', 'poll_option_3', 'poll_option_4'] as $field) {
-		$option = trim((string) ($validated[$field] ?? ''));
+	foreach (($validated['poll_options'] ?? []) as $rawOption) {
+		$option = trim((string) $rawOption);
 		if ($option !== '') {
 			$pollOptions[] = $option;
 		}
@@ -513,30 +606,37 @@ Route::post('/foro', function (Request $request, JsonUserStore $users, ForumStor
 	}
 
 	try {
+		$attachments = [];
+		foreach ([
+			'photos' => 'photo',
+			'videos' => 'video',
+			'files' => 'file',
+		] as $inputName => $attachmentType) {
+			foreach ($request->file($inputName, []) as $uploaded) {
+				$uploadsDir = public_path('uploads/forum/' . $attachmentType . 's');
+				if (!is_dir($uploadsDir)) {
+					mkdir($uploadsDir, 0755, true);
+				}
+
+				$extension = strtolower((string) $uploaded->getClientOriginalExtension()) ?: 'bin';
+				$filename = bin2hex(random_bytes(8)) . '_' . time() . '.' . $extension;
+				$uploaded->move($uploadsDir, $filename);
+				$attachments[] = [
+					'type' => $attachmentType,
+					'name' => (string) $uploaded->getClientOriginalName(),
+					'mime' => (string) $uploaded->getMimeType(),
+					'path' => 'uploads/forum/' . $attachmentType . 's/' . $filename,
+				];
+			}
+		}
+
 		$post = $forumStore->addPost(
 			(string) ($currentUser['username'] ?? 'usuario'),
 			(string) $validated['content'],
 			isset($validated['title']) ? (string) $validated['title'] : null,
-			$pollPayload
+			$pollPayload,
+			$attachments
 		);
-
-		if ($request->hasFile('image')) {
-			$uploaded = $request->file('image');
-			$uploadsDir = public_path('uploads/forum');
-
-			if (!is_dir($uploadsDir)) {
-				mkdir($uploadsDir, 0755, true);
-			}
-
-			$extension = strtolower((string) $uploaded->getClientOriginalExtension());
-			if ($extension === '') {
-				$extension = 'jpg';
-			}
-
-			$filename = bin2hex(random_bytes(8)) . '_' . time() . '.' . $extension;
-			$uploaded->move($uploadsDir, $filename);
-			$forumStore->setPostImagePath((string) ($post['id'] ?? ''), 'uploads/forum/' . $filename);
-		}
 
 		return redirect('/foro')->with('success', 'Publicacion creada en el foro.');
 	} catch (RuntimeException $e) {
@@ -932,6 +1032,7 @@ Route::post('/admin/users', function (Request $request, JsonUserStore $users) {
 	}
 
 	$validated = $request->validate([
+		'name' => ['nullable', 'string', 'max:80'],
 		'username' => ['nullable', 'string', 'min:3', 'max:24', 'regex:/^[A-Za-z0-9_.]+$/'],
 		'password' => ['nullable', 'string', 'min:6', 'max:72'],
 		'role' => 'required|in:user,admin',
@@ -967,7 +1068,8 @@ Route::post('/admin/users', function (Request $request, JsonUserStore $users) {
 		$createdUser = $users->createUser(
 			$username,
 			$password,
-			$role
+			$role,
+			(string) ($validated['name'] ?? '')
 		);
 
 		$message = "Usuario creado: {$createdUser['username']} ({$createdUser['role']})";
@@ -1076,7 +1178,7 @@ Route::post('/admin/users/delete', function (Request $request, JsonUserStore $us
 	}
 });
 
-Route::get('/chat/users', function (Request $request, JsonUserStore $users) {
+Route::get('/chat/users', function (Request $request, JsonUserStore $users, FriendStore $friends) {
 	$authUser = virthub_active_user($request, $users);
 
 	if (!$authUser) {
@@ -1090,9 +1192,11 @@ Route::get('/chat/users', function (Request $request, JsonUserStore $users) {
 	$users->bootstrapAdminFromEnv();
 	$users->touchPresence((string) $authUser['username']);
 	$currentUsername = (string) ($authUser['username'] ?? '');
-	$contacts = array_values(array_filter($users->allPublicUsers(), function (array $user) use ($currentUsername): bool {
+	$friendUsernames = $friends->friendsOf($currentUsername);
+	$contacts = array_values(array_filter($users->allPublicUsers(), function (array $user) use ($currentUsername, $friendUsernames): bool {
 		return ($user['username'] ?? '') !== ''
-			&& ($user['username'] ?? '') !== $currentUsername;
+			&& ($user['username'] ?? '') !== $currentUsername
+			&& in_array((string) ($user['username'] ?? ''), $friendUsernames, true);
 	}));
 
 	$contacts = array_map(function (array $user): array {
@@ -1106,6 +1210,51 @@ Route::get('/chat/users', function (Request $request, JsonUserStore $users) {
 	}, $contacts);
 
 	return response()->json(['users' => $contacts], 200);
+});
+
+Route::get('/chat/friend-requests', function (Request $request, JsonUserStore $users, FriendStore $friends) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return response()->json(['error' => 'Solo usuarios registrados pueden consultar solicitudes.'], 403);
+	}
+
+	$requests = array_map(function (array $friendRequest) use ($users): array {
+		$sender = $users->findPublicProfile((string) ($friendRequest['from'] ?? ''));
+
+		return [
+			'id' => $friendRequest['id'] ?? '',
+			'from' => $friendRequest['from'] ?? '',
+			'name' => $sender['name'] ?? ($friendRequest['from'] ?? ''),
+			'created_at' => $friendRequest['created_at'] ?? null,
+		];
+	}, $friends->pendingFor((string) $authUser['username']));
+
+	return response()->json(['requests' => $requests], 200);
+});
+
+Route::post('/chat/friend-requests/{requestId}', function (Request $request, string $requestId, JsonUserStore $users, FriendStore $friends) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return response()->json(['error' => 'Solo usuarios registrados pueden responder solicitudes.'], 403);
+	}
+
+	$validated = $request->validate([
+		'status' => ['required', 'in:accepted,declined'],
+	]);
+
+	try {
+		$updatedRequest = $friends->respondToRequest(
+			$requestId,
+			(string) $authUser['username'],
+			(string) $validated['status']
+		);
+
+		return response()->json(['request' => $updatedRequest], 200);
+	} catch (RuntimeException $e) {
+		return response()->json(['error' => $e->getMessage()], 422);
+	}
 });
 
 Route::post('/chat/presence', function (Request $request, JsonUserStore $users) {
@@ -1122,7 +1271,7 @@ Route::post('/chat/presence', function (Request $request, JsonUserStore $users) 
 	return response()->json(['ok' => true], 200);
 });
 
-Route::get('/chat/conversation/{username}', function (Request $request, string $username, JsonUserStore $users, ChatStore $chatStore) {
+Route::get('/chat/conversation/{username}', function (Request $request, string $username, JsonUserStore $users, ChatStore $chatStore, FriendStore $friends) {
 	$authUser = virthub_active_user($request, $users);
 
 	if (!$authUser) {
@@ -1142,6 +1291,10 @@ Route::get('/chat/conversation/{username}', function (Request $request, string $
 
 		if (!$targetUser || !($targetUser['is_active'] ?? true)) {
 			return response()->json(['error' => 'Usuario no encontrado'], 404);
+		}
+
+		if (!in_array($username, $friends->friendsOf((string) $authUser['username']), true)) {
+			return response()->json(['error' => 'Solo puedes conversar con tus amigos aceptados.'], 403);
 		}
 	}
 
@@ -1171,7 +1324,7 @@ Route::get('/chat/conversation/{username}', function (Request $request, string $
 	], 200);
 });
 
-Route::post('/chat/conversation/{username}', function (Request $request, string $username, JsonUserStore $users, ChatStore $chatStore) {
+Route::post('/chat/conversation/{username}', function (Request $request, string $username, JsonUserStore $users, ChatStore $chatStore, FriendStore $friends) {
 	$authUser = virthub_active_user($request, $users);
 
 	if (!$authUser) {
@@ -1191,6 +1344,10 @@ Route::post('/chat/conversation/{username}', function (Request $request, string 
 
 		if (!$targetUser || !($targetUser['is_active'] ?? true)) {
 			return response()->json(['error' => 'Usuario no encontrado'], 404);
+		}
+
+		if (!in_array($username, $friends->friendsOf((string) $authUser['username']), true)) {
+			return response()->json(['error' => 'Solo puedes conversar con tus amigos aceptados.'], 403);
 		}
 	}
 

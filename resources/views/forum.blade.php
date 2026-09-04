@@ -17,10 +17,14 @@
         }
 
         .forum-layout {
-            display: grid;
-            grid-template-columns: minmax(260px, 340px) 1fr;
-            gap: 12px;
+            display: block;
             align-items: start;
+        }
+
+        .forum-card {
+            margin-bottom: 12px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .forum-card {
@@ -67,6 +71,165 @@
             cursor: pointer;
         }
 
+        .forum-compose-launcher {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 4px;
+            padding: 8px;
+            text-align: left;
+            background-color: var(--vh-button-bg);
+            border: 1px solid var(--vh-border);
+            color: var(--vh-text);
+            font-family: Monocraft Nerd Font, monospace;
+            font-size: 13px;
+            cursor: text;
+        }
+
+        .forum-compose-launcher:hover {
+            background-color: var(--vh-button-hover);
+        }
+
+        .forum-compose-modal {
+            position: fixed !important;
+            top: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+            background: rgba(8, 17, 28, 0.78);
+            backdrop-filter: blur(3px);
+        }
+
+        .forum-compose-modal.is-open {
+            display: flex;
+            animation: aero-compose-backdrop-in 0.24s ease-out both;
+        }
+
+        .forum-compose-card {
+            width: min(680px, 100%);
+            box-sizing: border-box;
+            max-height: min(760px, 92vh);
+            overflow: auto;
+            padding: 16px;
+            background: var(--vh-surface-strong);
+            border: 1px solid var(--vh-border);
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+        }
+
+        .forum-compose-modal.is-open .forum-compose-card {
+            animation: aero-compose-card-in 0.38s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+        }
+
+        @keyframes aero-compose-backdrop-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes aero-compose-card-in {
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.96);
+                filter: blur(4px);
+            }
+            70% {
+                opacity: 1;
+                transform: translateY(-2px) scale(1.005);
+                filter: blur(0);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0);
+            }
+        }
+
+        .forum-compose-modal.is-closing {
+            display: flex;
+            animation: aero-compose-backdrop-out 0.2s ease-in both;
+        }
+
+        .forum-compose-modal.is-closing .forum-compose-card {
+            animation: aero-compose-card-out 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+        }
+
+        @keyframes aero-compose-backdrop-out {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        @keyframes aero-compose-card-out {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(10px) scale(0.97);
+                filter: blur(3px);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .forum-compose-modal.is-open,
+            .forum-compose-modal.is-open .forum-compose-card,
+            .forum-compose-modal.is-closing,
+            .forum-compose-modal.is-closing .forum-compose-card {
+                animation: none;
+            }
+        }
+
+        .forum-compose-head,
+        .forum-compose-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .forum-compose-head h3 {
+            margin: 0;
+        }
+
+        .forum-compose-close {
+            margin: 0;
+            padding: 4px 9px;
+        }
+
+        .forum-attachment-tools {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 8px 0 12px;
+        }
+
+        .forum-attachment-tools button {
+            margin: 0;
+            padding: 7px 9px;
+        }
+
+        .forum-attachment-tools input[type="file"] {
+            display: none;
+        }
+
+        .forum-attachment-status {
+            margin: 0 0 8px;
+            color: var(--vh-text-soft);
+            font-size: 11px;
+        }
+
+        #forumPollBuilder[hidden] {
+            display: none;
+        }
+
         .forum-form button {
             margin-top: 6px;
             padding: 8px 12px;
@@ -98,6 +261,19 @@
             margin: 0 0 8px 0;
             font-size: 11px;
             color: var(--vh-text-soft);
+        }
+
+        .poll-options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .poll-add-option {
+            align-self: flex-start;
+            margin-top: 2px !important;
+            padding: 5px 8px !important;
+            font-size: 11px;
         }
 
         .forum-poll {
@@ -280,8 +456,14 @@
 
         .forum-report-modal {
             position: fixed;
-            inset: 0;
-            z-index: 1200;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+            z-index: 2001;
             display: none;
             align-items: center;
             justify-content: center;
@@ -296,6 +478,9 @@
 
         .forum-report-card {
             width: min(560px, 100%);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            box-sizing: border-box;
             border: 1px solid var(--vh-border);
             background-color: var(--vh-surface-strong);
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
@@ -517,6 +702,13 @@
                 <h3>Publicar</h3>
 
                 @if ($canPost)
+                    <button type="button" class="forum-compose-launcher" id="openForumComposer">¿Que quieres compartir?</button>
+                    <div class="forum-compose-modal" id="forumComposeModal" aria-hidden="true">
+                        <div class="forum-compose-card" role="dialog" aria-modal="true" aria-labelledby="forumComposeTitle" onclick="event.stopPropagation()">
+                            <div class="forum-compose-head">
+                                <h3 id="forumComposeTitle">Crear publicacion</h3>
+                                <button type="button" class="forum-compose-close" id="closeForumComposer" aria-label="Cerrar">×</button>
+                            </div>
                     <form class="forum-form" method="POST" action="{{ url('/foro') }}" enctype="multipart/form-data">
                         @csrf
                         <label for="forumTitle">Titulo (opcional)
@@ -525,32 +717,41 @@
                         <label for="forumContent">Contenido
                             <textarea id="forumContent" name="content" maxlength="5000" required placeholder="Comparte tu idea o pregunta..."></textarea>
                         </label>
-                        <label for="forumImage">Foto (opcional)
-                            <input type="file" id="forumImage" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
-                        </label>
+                        <div class="forum-attachment-tools" aria-label="Agregar contenido">
+                            <button type="button" data-file-trigger="forumPhotos">▣ Foto</button>
+                            <button type="button" id="toggleForumPoll">▤ Encuesta</button>
+                            <button type="button" data-file-trigger="forumVideos">▶ Video</button>
+                            <button type="button" data-file-trigger="forumFiles">▤ Archivo</button>
+                            <input type="file" id="forumPhotos" name="photos[]" accept="image/png,image/jpeg,image/webp,image/gif" multiple>
+                            <input type="file" id="forumVideos" name="videos[]" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" multiple>
+                            <input type="file" id="forumFiles" name="files[]" multiple>
+                        </div>
+                        <p class="forum-attachment-status" id="forumAttachmentStatus">Puedes adjuntar archivos de hasta 5 GB cada uno.</p>
 
-                        <div class="poll-builder">
+                        <div class="poll-builder" id="forumPollBuilder" hidden>
                             <h4>Encuesta (opcional)</h4>
                             <p class="poll-builder-help">Si agregas pregunta, debes completar al menos 2 opciones.</p>
                             <label for="pollQuestion">Pregunta
                                 <input type="text" id="pollQuestion" name="poll_question" maxlength="180" value="{{ old('poll_question') }}" placeholder="Ejemplo: Que tema quieres ver la proxima semana?">
                             </label>
-                            <label for="pollOption1">Opcion 1
-                                <input type="text" id="pollOption1" name="poll_option_1" maxlength="120" value="{{ old('poll_option_1') }}" placeholder="Primera opcion">
-                            </label>
-                            <label for="pollOption2">Opcion 2
-                                <input type="text" id="pollOption2" name="poll_option_2" maxlength="120" value="{{ old('poll_option_2') }}" placeholder="Segunda opcion">
-                            </label>
-                            <label for="pollOption3">Opcion 3 (opcional)
-                                <input type="text" id="pollOption3" name="poll_option_3" maxlength="120" value="{{ old('poll_option_3') }}" placeholder="Tercera opcion">
-                            </label>
-                            <label for="pollOption4">Opcion 4 (opcional)
-                                <input type="text" id="pollOption4" name="poll_option_4" maxlength="120" value="{{ old('poll_option_4') }}" placeholder="Cuarta opcion">
-                            </label>
+                            <div class="poll-options-list" id="pollOptionsList">
+                                <label>Opcion 1
+                                    <input type="text" name="poll_options[]" maxlength="120" placeholder="Primera opcion">
+                                </label>
+                                <label>Opcion 2
+                                    <input type="text" name="poll_options[]" maxlength="120" placeholder="Segunda opcion">
+                                </label>
+                            </div>
+                            <button type="button" class="poll-add-option" id="addPollOption">+ Agregar opcion</button>
                         </div>
 
-                        <button type="submit">Publicar</button>
+                        <div class="forum-compose-actions">
+                            <button type="button" class="forum-compose-close">Cancelar</button>
+                            <button type="submit">Publicar</button>
+                        </div>
                     </form>
+                        </div>
+                    </div>
                 @else
                     <p class="auth-message auth-error">Solo usuarios registrados pueden publicar. Invitados y visitantes pueden leer el contenido del foro.</p>
                 @endif
@@ -614,6 +815,18 @@
 
                         @if (!empty($post['image_path']))
                             <img class="forum-post-image" src="{{ asset($post['image_path']) }}" alt="Imagen de publicacion de {{ $post['author'] ?? 'usuario' }}" loading="lazy">
+                        @endif
+
+                        @if (!empty($post['attachments']) && is_array($post['attachments']))
+                            @foreach ($post['attachments'] as $attachment)
+                                @if (($attachment['type'] ?? '') === 'photo')
+                                    <img class="forum-post-image" src="{{ asset($attachment['path']) }}" alt="Imagen adjunta" loading="lazy">
+                                @elseif (($attachment['type'] ?? '') === 'video')
+                                    <video class="forum-post-image" controls preload="metadata"><source src="{{ asset($attachment['path']) }}" type="{{ $attachment['mime'] ?? 'video/mp4' }}"></video>
+                                @else
+                                    <p><a href="{{ asset($attachment['path']) }}" target="_blank" rel="noopener">{{ $attachment['name'] ?? 'Abrir archivo adjunto' }}</a></p>
+                                @endif
+                            @endforeach
                         @endif
 
                         @if ($hasPoll)
@@ -824,6 +1037,62 @@
             });
         }
 
+        function bindForumComposer() {
+            const modal = document.getElementById('forumComposeModal');
+            const openButton = document.getElementById('openForumComposer');
+            const pollBuilder = document.getElementById('forumPollBuilder');
+            const pollToggle = document.getElementById('toggleForumPoll');
+            const pollOptionsList = document.getElementById('pollOptionsList');
+            const addPollOption = document.getElementById('addPollOption');
+            if (!modal || !openButton) return;
+
+            document.body.appendChild(modal);
+
+            const close = () => {
+                if (!modal.classList.contains('is-open') || modal.classList.contains('is-closing')) return;
+
+                modal.classList.remove('is-open');
+                modal.classList.add('is-closing');
+                modal.setAttribute('aria-hidden', 'true');
+                window.setTimeout(() => modal.classList.remove('is-closing'), 220);
+            };
+
+            openButton.addEventListener('click', () => {
+                modal.classList.remove('is-closing');
+                modal.classList.add('is-open');
+                modal.setAttribute('aria-hidden', 'false');
+                document.getElementById('forumContent')?.focus();
+            });
+            modal.querySelectorAll('.forum-compose-close').forEach(button => button.addEventListener('click', close));
+            modal.addEventListener('click', close);
+            pollToggle?.addEventListener('click', () => {
+                pollBuilder.hidden = !pollBuilder.hidden;
+            });
+            addPollOption?.addEventListener('click', () => {
+                if (!pollOptionsList || pollOptionsList.children.length >= 10) return;
+
+                const optionNumber = pollOptionsList.children.length + 1;
+                const label = document.createElement('label');
+                label.textContent = 'Opcion ' + optionNumber;
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = 'poll_options[]';
+                input.maxLength = 120;
+                input.placeholder = 'Nueva opcion';
+
+                label.appendChild(input);
+                pollOptionsList.appendChild(label);
+                input.focus();
+            });
+            document.querySelectorAll('[data-file-trigger]').forEach(button => {
+                button.addEventListener('click', () => document.getElementById(button.dataset.fileTrigger)?.click());
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') close();
+            });
+        }
+
         function applyThemeState() {
             const isDark = localStorage.getItem(getThemeStorageKey()) === '1';
             document.body.classList.toggle('dark-mode', isDark);
@@ -883,6 +1152,7 @@
         window.addEventListener('DOMContentLoaded', applySidebarState);
         window.addEventListener('DOMContentLoaded', applyThemeState);
         window.addEventListener('DOMContentLoaded', bindReportModalEvents);
+        window.addEventListener('DOMContentLoaded', bindForumComposer);
     </script>
 </body>
 </html>

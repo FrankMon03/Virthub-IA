@@ -101,6 +101,44 @@
             overflow-wrap: anywhere;
         }
 
+        .profile-identity {
+            margin: 4px 0;
+            color: var(--vh-text-soft);
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .profile-friend-action {
+            margin-top: 8px;
+        }
+
+        .profile-friend-action button {
+            padding: 7px 10px;
+            border: 1px solid var(--vh-border);
+            background: var(--vh-button-bg);
+            color: var(--vh-text);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .profile-friend-state {
+            color: var(--vh-text-soft);
+            font-size: 12px;
+        }
+
+        .profile-post-media {
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .profile-post-media img,
+        .profile-post-media video {
+            max-width: 100%;
+            max-height: 360px;
+            border: 1px solid var(--vh-border);
+        }
+
         .profile-status {
             margin: 0 0 12px;
             padding: 10px;
@@ -151,8 +189,27 @@
                     @endif
                 </div>
                 <div>
-                    <h2>{{ $profile['username'] }}</h2>
-                    <p class="profile-role">{{ $profile['role'] === 'admin' ? 'Administrador' : 'Usuario' }}</p>
+                    <h2>{{ $profile['name'] ?: $profile['username'] }}</h2>
+                    <p class="profile-identity">ID: {{ $profile['id'] }}</p>
+                    <p class="profile-identity">Username: {{ '@' . $profile['username'] }}</p>
+                    @if (!$isOwner && !empty($currentUser) && (($currentUser['role'] ?? 'guest') !== 'guest'))
+                        @php($friendshipStatus = $friendship['status'] ?? '')
+                        <div class="profile-friend-action">
+                            @if ($friendshipStatus === 'accepted')
+                                <span class="profile-friend-state">Amigos</span>
+                            @elseif (($friendship['from'] ?? '') === ($currentUser['username'] ?? '') && $friendshipStatus === 'pending')
+                                <span class="profile-friend-state">Solicitud enviada</span>
+                            @elseif (($friendship['to'] ?? '') === ($currentUser['username'] ?? '') && $friendshipStatus === 'pending')
+                                <a class="profile-friend-state" href="{{ url('/buscar-amigos') }}">Responder solicitud</a>
+                            @else
+                                <form method="POST" action="{{ url('/amistad/solicitud') }}">
+                                    @csrf
+                                    <input type="hidden" name="username" value="{{ $profile['username'] }}">
+                                    <button type="submit">Enviar solicitud de amistad</button>
+                                </form>
+                            @endif
+                        </div>
+                    @endif
                     @if (!empty($profile['created_at']))
                         <p class="profile-date">Miembro desde {{ date('d/m/Y', strtotime($profile['created_at'])) }}</p>
                     @endif
@@ -175,9 +232,26 @@
                 <div class="profile-posts">
                     @foreach ($profilePosts as $post)
                         <article class="profile-post">
-                            <h3>{{ $profile['username'] }}</h3>
+                            <h3>{{ $profile['name'] ?: $profile['username'] }}</h3>
                             <time datetime="{{ $post['created_at'] }}">{{ date('d/m/Y H:i', strtotime($post['created_at'])) }}</time>
+                            @if (isset($post['title']))
+                                <p class="profile-identity">Publicacion del foro{{ !empty($post['title']) ? ': ' . $post['title'] : '' }}</p>
+                            @endif
                             <p class="profile-post-content">{{ $post['content'] }}</p>
+                            @if (!empty($post['image_path']))
+                                <div class="profile-post-media"><img src="{{ asset($post['image_path']) }}" alt="Imagen de publicacion" loading="lazy"></div>
+                            @endif
+                            @if (!empty($post['attachments']) && is_array($post['attachments']))
+                                <div class="profile-post-media">
+                                    @foreach ($post['attachments'] as $attachment)
+                                        @if (($attachment['type'] ?? '') === 'video')
+                                            <video controls preload="metadata"><source src="{{ asset($attachment['path']) }}" type="{{ $attachment['mime'] ?? 'video/mp4' }}"></video>
+                                        @else
+                                            <a href="{{ asset($attachment['path']) }}" target="_blank" rel="noopener">{{ $attachment['name'] ?? 'Abrir archivo' }}</a>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            @endif
                         </article>
                     @endforeach
                 </div>
