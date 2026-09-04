@@ -37,9 +37,32 @@
                     </form>
                 </div>
             </div>
+                @else
+                    <button type="button" class="header-login-button" id="openLoginModal">Iniciar sesión</button>
         @endif
     </div>
 </header>
+
+        @if (empty($currentUser) || (($currentUser['role'] ?? 'guest') === 'guest'))
+            <div class="header-login-modal" id="headerLoginModal" aria-hidden="true">
+                <div class="header-login-card" role="dialog" aria-modal="true" aria-labelledby="headerLoginTitle" onclick="event.stopPropagation()">
+                    <button type="button" class="header-login-close" id="closeLoginModal" aria-label="Cerrar">×</button>
+                    <h2 id="headerLoginTitle">Iniciar sesión</h2>
+                    <form method="POST" action="{{ url('/login') }}">
+                        @csrf
+                        <label for="headerLoginUsername">Username</label>
+                        <input type="text" id="headerLoginUsername" name="username" value="{{ old('username') }}" required autofocus>
+                        <label for="headerLoginPassword">Contraseña</label>
+                        <input type="password" id="headerLoginPassword" name="password" required>
+                        <button type="submit">Entrar</button>
+                    </form>
+                    <form method="POST" action="{{ url('/guest-login') }}">
+                        @csrf
+                        <button type="submit" class="header-guest-button">Entrar como invitado</button>
+                    </form>
+                </div>
+            </div>
+        @endif
 
 <script>
     (() => {
@@ -70,6 +93,29 @@
                 window.toggleRetroMode();
                 typedSequence = '';
             }
+        });
+    })();
+
+    (() => {
+        const modal = document.getElementById('headerLoginModal');
+        const openButton = document.getElementById('openLoginModal');
+        const closeButton = document.getElementById('closeLoginModal');
+        if (!modal || !openButton) return;
+
+        const close = () => {
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+        };
+
+        openButton.addEventListener('click', () => {
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            document.getElementById('headerLoginUsername')?.focus();
+        });
+        closeButton?.addEventListener('click', close);
+        modal.addEventListener('click', close);
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') close();
         });
     })();
 </script>

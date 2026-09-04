@@ -673,6 +673,34 @@
                 padding: 8px;
             }
 
+            .forum-compose-modal {
+                padding: 8px;
+            }
+
+            .forum-compose-card {
+                max-height: calc(100vh - 16px);
+                padding: 12px;
+            }
+
+            .forum-compose-actions {
+                flex-direction: column-reverse;
+                align-items: stretch;
+            }
+
+            .forum-compose-actions button,
+            .poll-add-option {
+                width: 100%;
+            }
+
+            .forum-report-modal {
+                padding: 8px;
+            }
+
+            .forum-report-card {
+                max-height: calc(100vh - 16px);
+                padding: 12px;
+            }
+
             .forum-poll {
                 padding: 8px;
             }

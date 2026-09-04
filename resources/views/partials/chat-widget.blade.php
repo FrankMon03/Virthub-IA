@@ -314,6 +314,19 @@
                 min-height: 320px;
                 max-height: calc(100vh - 110px);
             }
+
+            .chat-friend-request-item {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .chat-friend-request-actions {
+                width: 100%;
+            }
+
+            .chat-friend-request-button {
+                flex: 1;
+            }
         }
     </style>
 

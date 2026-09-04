@@ -24,7 +24,12 @@
         .friend-result form { margin: 0; }
         .friend-result button { border: 1px solid var(--vh-border); padding: 7px 10px; background: var(--vh-button-bg); color: var(--vh-text); font: inherit; cursor: pointer; }
         .friends-empty { color: var(--vh-text-soft); }
-        @media (max-width: 560px) { .friends-search, .friend-result { flex-direction: column; align-items: stretch; } .friend-result a { text-align: center; } }
+        @media (max-width: 560px) {
+            .friends-page { margin: 8px 0; padding: 8px; }
+            .friends-panel, .friend-result { padding: 10px; }
+            .friends-search, .friend-result { flex-direction: column; align-items: stretch; }
+            .friends-search button, .friend-result a, .friend-result button { width: 100%; box-sizing: border-box; text-align: center; }
+        }
     </style>
 </head>
 <body>

@@ -169,6 +169,7 @@ if (!function_exists('virthub_active_user')) {
 		}
 
 		return [
+			'name' => (string) ($freshUser['name'] ?? $freshUser['username'] ?? ''),
 			'username' => $freshUser['username'],
 			'role' => $freshUser['role'] ?? 'user',
 			'profile_image_path' => $freshUser['profile_image_path'] ?? null,

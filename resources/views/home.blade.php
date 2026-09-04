@@ -5,6 +5,72 @@
         min-height: 250px;
     }
 
+    .welcome-gadget {
+        min-height: 250px;
+    }
+
+    .welcome-gadget-body {
+        display: flex;
+        min-height: 190px;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 18px;
+    }
+
+    .welcome-gadget-kicker {
+        margin: 0 0 8px;
+        color: var(--vh-text-soft);
+        font-size: 12px;
+    }
+
+    .welcome-gadget h4 {
+        margin: 0;
+        color: var(--vh-text);
+        font-size: 21px;
+    }
+
+    .welcome-gadget-copy {
+        margin: 8px 0 0;
+        color: var(--vh-panel-text);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .welcome-gadget-footer {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--vh-border);
+        padding-top: 10px;
+    }
+
+    .welcome-gadget-clock {
+        margin: 0;
+        color: var(--vh-text);
+        font-size: 18px;
+    }
+
+    .welcome-gadget-date {
+        margin: 3px 0 0;
+        color: var(--vh-text-soft);
+        font-size: 11px;
+    }
+
+    .welcome-gadget-link {
+        padding: 7px 9px;
+        border: 1px solid var(--vh-border);
+        background: var(--vh-button-bg);
+        color: var(--vh-text);
+        font: 11px Monocraft Nerd Font, monospace;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .welcome-gadget-link:hover {
+        background: var(--vh-button-hover);
+    }
+
     .calendar-headline {
         display: flex;
         align-items: center;
@@ -247,9 +313,9 @@
             </div>
         </aside>
 
-        <div class="login-screen gadget access-gadget gadget-size-normal" data-gadget-id="access" data-gadget-size="normal" data-default-size="normal">
+        <aside class="linux-news-panel gadget welcome-gadget gadget-size-normal" data-gadget-id="welcome" data-gadget-size="normal" data-default-size="normal">
             <div class="gadget-head">
-                <h3>Acceso</h3>
+                <h3>VirtHub</h3>
                 @if (!empty($currentUser))
                     <div class="gadget-actions gadget-actions-compact">
                         <span class="gadget-drag-chip" title="Arrastra para mover" aria-label="Arrastra para mover">⠿</span>
@@ -258,59 +324,32 @@
                 @endif
             </div>
 
-            @if (!empty($currentUser))
-                <p class="access-intro">
-                    Sesion iniciada. Usa estos accesos rapidos para entrar a las secciones principales de VirtHub.
-                </p>
-            @else
-                <p class="access-intro">
-                    No has iniciado sesion. Entra con tu cuenta o usa Invitado para una sesion temporal.
-                </p>
-            @endif
-
-            @if (session('error'))
-                <p class="auth-message auth-error">{{ session('error') }}</p>
-            @endif
-
-            @if (session('success'))
-                <p class="auth-message auth-success">{{ session('success') }}</p>
-            @endif
-
-            @if (!empty($currentUser))
-                @if (($currentUser['role'] ?? 'guest') === 'guest')
-                    <p class="auth-message auth-success" id="guestRemainingLabel" data-guest-remaining="{{ (int) ($guestRemainingSeconds ?? 0) }}">
-                        Tiempo restante invitado: calculando...
-                    </p>
-                @endif
-
-                <div class="quick-links-grid access-links-grid">
-                    <button type="button" onclick="location.href='{{ url('/foro') }}'">Foro</button>
-                    <button type="button" onclick="location.href='{{ url('/sugerencias') }}'">Sugerencias</button>
-                    <button type="button" onclick="location.href='{{ url('/contenedor') }}'">Contenedor</button>
-                    @if (($currentUser['role'] ?? 'user') === 'admin')
-                        <button type="button" onclick="location.href='{{ url('/admin/users') }}'">Panel Admin</button>
+            <div class="welcome-gadget-body">
+                <div>
+                    <p class="welcome-gadget-kicker">Panel de bienvenida</p>
+                    @if (!empty($currentUser) && (($currentUser['role'] ?? 'guest') !== 'guest'))
+                        <h4>Hola, {{ $currentUser['name'] ?: $currentUser['username'] }}</h4>
+                        <p class="welcome-gadget-copy">Tu espacio está listo. Mantente al día con las noticias y vuelve cuando quieras.</p>
+                    @elseif (!empty($currentUser))
+                        <h4>Hola, invitado</h4>
+                        <p class="welcome-gadget-copy">Explora VirtHub durante tu sesión temporal. Puedes iniciar sesión desde el botón del encabezado cuando quieras.</p>
+                    @else
+                        <h4>Bienvenido a VirtHub</h4>
+                        <p class="welcome-gadget-copy">Un espacio para descubrir noticias, conversar y compartir ideas con la comunidad.</p>
                     @endif
                 </div>
-            @else
-                <form method="POST" action="/login" id="loginForm">
-                    @csrf
-                    <label for="username">Usuario<p><input type="text" name="username" id="username" value="{{ old('username') }}" required><p></label>
-                    <label for="password">Contrasena<p><input type="password" name="password" id="password" required onkeypress="if(event.key==='Enter') document.getElementById('loginForm').requestSubmit();"><p></label>
-                    <button type="submit" style="display:none;">Iniciar Sesion</button>
-                </form>
 
-                <form method="POST" action="/guest-login" id="guestLoginForm">
-                    @csrf
-                </form>
-
-                <div class="quick-links-grid access-links-grid">
-                    <button type="button" onclick="document.getElementById('loginForm')?.requestSubmit()">Iniciar Sesión</button>
-                    <button type="button" onclick="document.getElementById('guestLoginForm')?.submit()">Invitado</button>
-                    <button type="button" onclick="location.href='{{ url('/foro') }}'">Foro</button>
-                    <button type="button" onclick="location.href='{{ url('/sugerencias') }}'">Sugerencias</button>
+                <div class="welcome-gadget-footer">
+                    <div>
+                        <p class="welcome-gadget-clock" id="welcomeClock">--:--</p>
+                        <p class="welcome-gadget-date" id="welcomeDate">Cargando fecha...</p>
+                    </div>
+                    @if (!empty($currentUser) && (($currentUser['role'] ?? 'guest') !== 'guest'))
+                        <a class="welcome-gadget-link" href="{{ url('/perfil/' . rawurlencode((string) $currentUser['username'])) }}">Mi perfil</a>
+                    @endif
                 </div>
-            @endif
-        </div>
+            </div>
+        </aside>
 
         @if (!empty($currentUser) && (($currentUser['role'] ?? 'guest') !== 'guest'))
         <aside class="linux-news-panel gadget calendar-gadget gadget-size-wide" data-gadget-id="calendar" data-gadget-size="wide" data-default-size="wide">
@@ -1632,6 +1671,20 @@
             }
         }
 
+        function updateWelcomeClock() {
+            const clock = document.getElementById('welcomeClock');
+            const date = document.getElementById('welcomeDate');
+            if (!clock || !date) return;
+
+            const now = new Date();
+            clock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+            date.textContent = now.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+            });
+        }
+
         bootstrapWorkspaceState();
         loadNews('/linux-news', 'linux-news-list');
         loadNews('/cyber-news', 'cyber-news-list');
@@ -1659,6 +1712,8 @@
         window.addEventListener('DOMContentLoaded', initMiniCalendar);
         window.addEventListener('DOMContentLoaded', refreshSystemStatus);
         window.addEventListener('DOMContentLoaded', startGuestCountdown);
+        window.addEventListener('DOMContentLoaded', updateWelcomeClock);
+        window.setInterval(updateWelcomeClock, 30000);
         window.addEventListener('resize', () => {
             if (!document.getElementById('systemStatusList')) return;
             drawSparkline('sys_cpu_chart', systemMetricHistory.cpu, '#9ac6ff');
