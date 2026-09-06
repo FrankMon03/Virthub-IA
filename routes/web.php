@@ -5,9 +5,13 @@ use App\Services\ForumStore;
 use App\Services\FriendStore;
 use App\Services\JsonUserStore;
 use App\Services\ProfileStore;
+use App\Services\TwoFactorService;
 use App\Services\UserWorkspaceStore;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
 if (!function_exists('virthub_system_status')) {
@@ -132,6 +136,42 @@ if (!function_exists('virthub_system_status')) {
 	}
 }
 
+if (!function_exists('virthub_cached_feed_items')) {
+	function virthub_cached_feed_items(string $cacheKey, string $feedUrl): array
+	{
+		return Cache::remember($cacheKey, 300, function () use ($feedUrl): array {
+			try {
+				$response = Http::timeout(8)->withoutVerifying()->get($feedUrl);
+
+				if (!$response->successful()) {
+					return [];
+				}
+
+				$xml = @simplexml_load_string($response->body());
+				if (!$xml || !isset($xml->channel->item)) {
+					return [];
+				}
+
+				$items = [];
+				foreach ($xml->channel->item as $item) {
+					$items[] = [
+						'title' => (string) $item->title,
+						'link' => (string) $item->link,
+					];
+
+					if (count($items) >= 6) {
+						break;
+					}
+				}
+
+				return $items;
+			} catch (Throwable $exception) {
+				return [];
+			}
+		});
+	}
+}
+
 if (!function_exists('virthub_active_user')) {
 	function virthub_active_user(Request $request, JsonUserStore $users): ?array
 	{
@@ -175,6 +215,34 @@ if (!function_exists('virthub_active_user')) {
 			'profile_image_path' => $freshUser['profile_image_path'] ?? null,
 			'profile_frame_color' => $freshUser['profile_frame_color'] ?? '#6ea8ff',
 		];
+	}
+}
+
+if (!function_exists('virthub_audit')) {
+	function virthub_audit(Request $request, string $event, ?array $user = null, array $context = []): void
+	{
+		Log::channel('security')->info($event, array_merge([
+			'username' => $user['username'] ?? null,
+			'role' => $user['role'] ?? null,
+			'ip' => $request->ip(),
+			'user_agent' => substr((string) $request->userAgent(), 0, 500),
+		], $context));
+	}
+}
+
+if (!function_exists('virthub_installation_request_is_authorized')) {
+	function virthub_installation_request_is_authorized(Request $request, JsonUserStore $users): bool
+	{
+		$installationKey = (string) config('installation.key', '');
+		$providedKey = (string) ($request->query('key', $request->input('key', '')));
+
+		if ($installationKey !== '' && $providedKey !== '') {
+			return hash_equals($installationKey, $providedKey);
+		}
+
+		return !$users->hasAdminAccount()
+			&& (app()->environment('testing')
+				|| in_array($request->getHost(), ['localhost', '127.0.0.1', '::1'], true));
 	}
 }
 
@@ -253,15 +321,26 @@ if (!function_exists('virthub_ollama_chat_username')) {
 }
 
 Route::get('/install', function (Request $request, JsonUserStore $users) {
+	if (!virthub_installation_request_is_authorized($request, $users)) {
+		abort(404);
+	}
+
+	$providedKey = (string) $request->query('key', '');
+
 	$installComplete = $users->hasAdminAccount();
 
 	return view('install', [
 		'installComplete' => $installComplete,
 		'statusMessage' => session('status_message'),
+		'installationKey' => $providedKey,
 	]);
 });
 
 Route::post('/install', function (Request $request, JsonUserStore $users) {
+	if (!virthub_installation_request_is_authorized($request, $users)) {
+		abort(404);
+	}
+
 	if ($users->hasAdminAccount()) {
 		abort(403, 'La instalacion ya fue completada.');
 	}
@@ -284,7 +363,7 @@ Route::get('/', function (Request $request, JsonUserStore $users) {
 	$workspaceState = null;
 
 	if ($currentUser && ($currentUser['role'] ?? 'user') === 'admin') {
-		$systemStatus = virthub_system_status();
+		$systemStatus = Cache::remember('virthub.system_status', 15, fn (): array => virthub_system_status());
 	}
 
 	if ($currentUser && ($currentUser['role'] ?? 'guest') !== 'guest') {
@@ -789,6 +868,10 @@ Route::post('/login', function (Request $request, JsonUserStore $users) {
 
 	if ($lockedUntil > time()) {
 		$remaining = $lockedUntil - time();
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'Demasiados intentos fallidos. Espera ' . $remaining . ' segundos.'], 429);
+		}
+
 		return redirect('/')->with('error', 'Demasiados intentos fallidos. Espera ' . $remaining . ' segundos.');
 	}
 
@@ -804,6 +887,10 @@ Route::post('/login', function (Request $request, JsonUserStore $users) {
 	);
 
 	if (!$authUser) {
+		virthub_audit($request, 'authentication.failed', null, [
+			'reason' => 'invalid_credentials',
+		]);
+
 		$currentFails = (int) $request->session()->get('login_fail_count', 0) + 1;
 		$request->session()->put('login_fail_count', $currentFails);
 
@@ -812,14 +899,37 @@ Route::post('/login', function (Request $request, JsonUserStore $users) {
 			$request->session()->put('login_locked_until', time() + $lockSeconds);
 			$request->session()->put('login_fail_count', 0);
 
+			if ($request->expectsJson()) {
+				return response()->json(['error' => 'Bloqueado temporalmente por fallos. Espera ' . $lockSeconds . ' segundos.'], 429);
+			}
+
 			return redirect('/')
 				->withInput($request->only('username'))
 				->with('error', 'Bloqueado temporalmente por fallos. Espera ' . $lockSeconds . ' segundos.');
 		}
 
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'Usuario o contrasena incorrectos. Fallos: ' . $currentFails . '/5'], 422);
+		}
+
 		return redirect('/')
 			->withInput($request->only('username'))
 			->with('error', 'Usuario o contrasena incorrectos. Fallos: ' . $currentFails . '/5');
+	}
+
+	if ($users->hasTwoFactorEnabled((string) $authUser['username'])) {
+		$request->session()->regenerate();
+		$request->session()->put('two_factor_pending_username', $authUser['username']);
+		$request->session()->forget('two_factor_fail_count');
+
+		if ($request->expectsJson()) {
+			return response()->json([
+				'two_factor_required' => true,
+				'message' => 'Introduce el codigo de Google Authenticator para continuar.',
+			], 200);
+		}
+
+		return redirect('/')->with('success', 'Introduce el codigo de Google Authenticator para continuar.');
 	}
 
 	$request->session()->regenerate();
@@ -828,9 +938,124 @@ Route::post('/login', function (Request $request, JsonUserStore $users) {
 	$request->session()->forget('login_locked_until');
 	$request->session()->forget('guest_expires_at');
 	$users->recordLogin((string) $authUser['username']);
+	virthub_audit($request, 'authentication.login', $authUser);
+	if ($request->expectsJson()) {
+		return response()->json(['authenticated' => true], 200);
+	}
 
 	return redirect('/')->with('success', 'Sesion iniciada correctamente.');
 })->middleware('throttle:login-ip');
+
+Route::post('/login/2fa', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
+	$pendingUsername = trim((string) $request->session()->get('two_factor_pending_username', ''));
+
+	if ($pendingUsername === '') {
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'La verificacion 2FA ya no es valida. Inicia sesion nuevamente.'], 422);
+		}
+
+		return redirect('/')->with('error', 'La verificacion 2FA ya no es valida. Inicia sesion nuevamente.');
+	}
+
+	$validated = $request->validate([
+		'code' => ['required', 'digits:6'],
+	]);
+	$user = $users->findByUsername($pendingUsername);
+	$encryptedSecret = $users->twoFactorSecret($pendingUsername);
+
+	if (!$user || !($user['is_active'] ?? true) || $encryptedSecret === null) {
+		$request->session()->forget(['two_factor_pending_username', 'two_factor_fail_count']);
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'La verificacion 2FA ya no es valida.'], 422);
+		}
+
+		return redirect('/')->with('error', 'La verificacion 2FA ya no es valida.');
+	}
+
+	$secret = $twoFactor->decryptSecret($encryptedSecret);
+	if (!$twoFactor->verifyCode($secret, (string) $validated['code'])) {
+		$failCount = (int) $request->session()->get('two_factor_fail_count', 0) + 1;
+		$request->session()->put('two_factor_fail_count', $failCount);
+		virthub_audit($request, 'authentication.2fa_failed', [
+			'username' => $pendingUsername,
+			'role' => $user['role'] ?? 'user',
+		]);
+
+		if ($failCount >= 5) {
+			$request->session()->forget(['two_factor_pending_username', 'two_factor_fail_count']);
+			if ($request->expectsJson()) {
+				return response()->json(['error' => 'Demasiados codigos 2FA incorrectos. Inicia sesion nuevamente.'], 429);
+			}
+
+			return redirect('/')->with('error', 'Demasiados codigos 2FA incorrectos. Inicia sesion nuevamente.');
+		}
+
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'El codigo de 2FA no es valido.'], 422);
+		}
+
+		return redirect('/')->with('error', 'El codigo de 2FA no es valido.');
+	}
+
+	$authUser = [
+		'username' => $user['username'],
+		'role' => $user['role'] ?? 'user',
+	];
+	$request->session()->regenerate();
+	$request->session()->put('auth_user', $authUser);
+	$request->session()->forget(['two_factor_pending_username', 'two_factor_fail_count']);
+	$users->recordLogin((string) $authUser['username']);
+	virthub_audit($request, 'authentication.2fa_verified', $authUser);
+	if ($request->expectsJson()) {
+		return response()->json(['authenticated' => true], 200);
+	}
+
+	return redirect('/')->with('success', 'Sesion iniciada correctamente.');
+})->middleware('throttle:10,1');
+
+Route::post('/login/2fa/recovery', function (Request $request, JsonUserStore $users) {
+	$pendingUsername = trim((string) $request->session()->get('two_factor_pending_username', ''));
+
+	if ($pendingUsername === '') {
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'La verificacion 2FA ya no es valida. Inicia sesion nuevamente.'], 422);
+		}
+
+		return redirect('/')->with('error', 'La verificacion 2FA ya no es valida. Inicia sesion nuevamente.');
+	}
+
+	$validated = $request->validate([
+		'recovery_code' => ['required', 'string', 'max:32'],
+	]);
+	$user = $users->findByUsername($pendingUsername);
+
+	if (!$user || !($user['is_active'] ?? true) || !$users->consumeTwoFactorRecoveryCode($pendingUsername, (string) $validated['recovery_code'])) {
+		virthub_audit($request, 'authentication.2fa_recovery_failed', [
+			'username' => $pendingUsername,
+			'role' => $user['role'] ?? null,
+		]);
+		if ($request->expectsJson()) {
+			return response()->json(['error' => 'El codigo de recuperacion no es valido.'], 422);
+		}
+
+		return redirect('/')->with('error', 'El codigo de recuperacion no es valido.');
+	}
+
+	$authUser = [
+		'username' => $user['username'],
+		'role' => $user['role'] ?? 'user',
+	];
+	$request->session()->regenerate();
+	$request->session()->put('auth_user', $authUser);
+	$request->session()->forget(['two_factor_pending_username', 'two_factor_fail_count']);
+	$users->recordLogin((string) $authUser['username']);
+	virthub_audit($request, 'authentication.2fa_recovery_used', $authUser);
+	if ($request->expectsJson()) {
+		return response()->json(['authenticated' => true], 200);
+	}
+
+	return redirect('/')->with('success', 'Sesion iniciada con un codigo de recuperacion.');
+})->middleware('throttle:10,1');
 
 Route::post('/guest-login', function (Request $request) {
 	$request->session()->regenerate();
@@ -841,28 +1066,170 @@ Route::post('/guest-login', function (Request $request) {
 		'role' => 'guest',
 	]);
 	$request->session()->put('guest_expires_at', time() + (30 * 60));
+	virthub_audit($request, 'authentication.guest_login', [
+		'username' => $guestName,
+		'role' => 'guest',
+	]);
 
 	return redirect('/')->with('success', 'Acceso temporal activado por 30 minutos.');
 });
 
 Route::post('/logout', function (Request $request) {
+	$sessionUser = $request->session()->get('auth_user');
+	virthub_audit($request, 'authentication.logout', is_array($sessionUser) ? $sessionUser : null);
+
 	$request->session()->invalidate();
 	$request->session()->regenerateToken();
 
 	return redirect('/')->with('success', 'Sesion cerrada.');
 });
 
-Route::get('/configuracion', function (Request $request, JsonUserStore $users) {
+Route::get('/configuracion', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
 	$currentUser = virthub_active_user($request, $users);
 
 	if (!$currentUser || ($currentUser['role'] ?? 'guest') === 'guest') {
 		return redirect('/')->with('error', 'Solo usuarios registrados pueden acceder a configuracion.');
 	}
 
+	$setupSecret = (string) $request->session()->get('two_factor_setup_secret', '');
+	$twoFactorSetupQr = null;
+
+	if ($setupSecret !== '') {
+		try {
+			$twoFactorSetupQr = $twoFactor->qrCodeDataUri((string) $currentUser['username'], $twoFactor->decryptSecret($setupSecret));
+		} catch (Throwable $exception) {
+			$request->session()->forget('two_factor_setup_secret');
+		}
+	}
+
 	return view('configuracion', [
 		'currentUser' => $currentUser,
+		'twoFactorEnabled' => $users->hasTwoFactorEnabled((string) $currentUser['username']),
+		'twoFactorSetupQr' => $twoFactorSetupQr,
 	]);
 });
+
+Route::post('/security/2fa/setup', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para configurar 2FA.');
+	}
+
+	$username = (string) $authUser['username'];
+
+	if ($users->hasTwoFactorEnabled($username)) {
+		return redirect('/configuracion')->with('error', 'El 2FA ya esta activado.');
+	}
+
+	$request->session()->put('two_factor_setup_secret', $twoFactor->encryptSecret($twoFactor->generateSecret()));
+
+	return redirect('/configuracion')->with('success', 'Escanea el codigo QR y confirma el codigo generado.');
+})->middleware('throttle:10,1');
+
+Route::post('/security/2fa/confirm', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para confirmar 2FA.');
+	}
+
+	$validated = $request->validate([
+		'code' => ['required', 'digits:6'],
+	]);
+	$encryptedSecret = (string) $request->session()->get('two_factor_setup_secret', '');
+
+	if ($encryptedSecret === '') {
+		return redirect('/configuracion')->with('error', 'Inicia primero la configuracion de 2FA.');
+	}
+
+	try {
+		$secret = $twoFactor->decryptSecret($encryptedSecret);
+	} catch (Throwable $exception) {
+		$request->session()->forget('two_factor_setup_secret');
+		return redirect('/configuracion')->with('error', 'La configuracion de 2FA ya no es valida.');
+	}
+
+	if (!$twoFactor->verifyCode($secret, (string) $validated['code'])) {
+		virthub_audit($request, 'authentication.2fa_setup_failed', $authUser);
+		return redirect('/configuracion')->with('error', 'El codigo de 2FA no es valido.');
+	}
+
+	$recoveryCodes = $twoFactor->generateRecoveryCodes();
+	$recoveryHashes = array_map([$twoFactor, 'hashRecoveryCode'], $recoveryCodes);
+	$users->enableTwoFactor((string) $authUser['username'], $encryptedSecret, $recoveryHashes);
+	$request->session()->forget('two_factor_setup_secret');
+	virthub_audit($request, 'security.2fa_enabled', $authUser);
+
+	if ($request->expectsJson()) {
+		return response()->json([
+			'two_factor_enabled' => true,
+			'recovery_codes' => $recoveryCodes,
+		], 200);
+	}
+
+	return redirect('/configuracion')->with('two_factor_recovery_codes', $recoveryCodes);
+})->middleware('throttle:10,1');
+
+Route::post('/security/2fa/disable', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return redirect('/')->with('error', 'Debes iniciar sesion para desactivar 2FA.');
+	}
+
+	$validated = $request->validate([
+		'current_password' => ['required', 'string', 'max:72'],
+		'code' => ['required', 'digits:6'],
+	]);
+	$username = (string) $authUser['username'];
+
+	if (!$users->verifyPassword($username, (string) $validated['current_password'])) {
+		return redirect('/configuracion')->with('error', 'La contrasena actual no es correcta.');
+	}
+
+	$encryptedSecret = $users->twoFactorSecret($username);
+	if ($encryptedSecret === null || !$twoFactor->verifyCode($twoFactor->decryptSecret($encryptedSecret), (string) $validated['code'])) {
+		return redirect('/configuracion')->with('error', 'El codigo de 2FA no es valido.');
+	}
+
+	$users->disableTwoFactor($username);
+	virthub_audit($request, 'security.2fa_disabled', $authUser);
+
+	return redirect('/configuracion')->with('success', 'El 2FA fue desactivado.');
+})->middleware('throttle:10,1');
+
+Route::post('/security/2fa/recovery-codes', function (Request $request, JsonUserStore $users, TwoFactorService $twoFactor) {
+	$authUser = virthub_active_user($request, $users);
+
+	if (!$authUser || ($authUser['role'] ?? 'guest') === 'guest') {
+		return response()->json(['error' => 'Debes iniciar sesion para regenerar los codigos.'], 403);
+	}
+
+	$validated = $request->validate([
+		'current_password' => ['required', 'string', 'max:72'],
+		'code' => ['required', 'digits:6'],
+	]);
+	$username = (string) $authUser['username'];
+
+	if (!$users->hasTwoFactorEnabled($username) || !$users->verifyPassword($username, (string) $validated['current_password'])) {
+		return response()->json(['error' => 'La contrasena actual no es correcta.'], 422);
+	}
+
+	$encryptedSecret = $users->twoFactorSecret($username);
+	if ($encryptedSecret === null || !$twoFactor->verifyCode($twoFactor->decryptSecret($encryptedSecret), (string) $validated['code'])) {
+		return response()->json(['error' => 'El codigo de 2FA no es valido.'], 422);
+	}
+
+	$recoveryCodes = $twoFactor->generateRecoveryCodes();
+	$users->replaceTwoFactorRecoveryCodes(
+		$username,
+		array_map([$twoFactor, 'hashRecoveryCode'], $recoveryCodes)
+	);
+	virthub_audit($request, 'security.2fa_recovery_codes_regenerated', $authUser);
+
+	return response()->json(['recovery_codes' => $recoveryCodes], 200);
+})->middleware('throttle:10,1');
 
 Route::post('/profile/appearance', function (Request $request, JsonUserStore $users) {
 	$authUser = virthub_active_user($request, $users);
@@ -1530,6 +1897,9 @@ Route::get('/contenedor/launch', function (Request $request) {
 	}
 
 	$url = virthub_get_container_url($authUser);
+	virthub_audit($request, 'webtop.launch', $authUser, [
+		'container_url' => $url,
+	]);
 
 	return redirect()->away($url);
 });
@@ -1600,75 +1970,19 @@ Route::get('/system-status', function (Request $request) {
 		return response()->json(['error' => 'Solo admin'], 403);
 	}
 
-	return response()->json(['status' => virthub_system_status()], 200);
+	return response()->json([
+		'status' => Cache::remember('virthub.system_status', 15, fn (): array => virthub_system_status()),
+	], 200);
 });
 
 Route::get('/linux-news', function () {
-	$feedUrl = 'https://www.phoronix.com/rss.php';
-
-	try {
-		$response = Http::timeout(8)->withoutVerifying()->get($feedUrl);
-
-		if (!$response->successful()) {
-			return response()->json(['items' => []], 200);
-		}
-
-		$xml = @simplexml_load_string($response->body());
-
-		if (!$xml || !isset($xml->channel->item)) {
-			return response()->json(['items' => []], 200);
-		}
-
-		$items = [];
-
-		foreach ($xml->channel->item as $item) {
-			$items[] = [
-				'title' => (string) $item->title,
-				'link' => (string) $item->link,
-			];
-
-			if (count($items) >= 6) {
-				break;
-			}
-		}
-
-		return response()->json(['items' => $items], 200);
-	} catch (Throwable $e) {
-		return response()->json(['items' => []], 200);
-	}
+	return response()->json([
+		'items' => virthub_cached_feed_items('virthub.news.linux', 'https://www.phoronix.com/rss.php'),
+	], 200);
 });
 
 Route::get('/cyber-news', function () {
-	$feedUrl = 'https://feeds.feedburner.com/TheHackersNews';
-
-	try {
-		$response = Http::timeout(8)->withoutVerifying()->get($feedUrl);
-
-		if (!$response->successful()) {
-			return response()->json(['items' => []], 200);
-		}
-
-		$xml = @simplexml_load_string($response->body());
-
-		if (!$xml || !isset($xml->channel->item)) {
-			return response()->json(['items' => []], 200);
-		}
-
-		$items = [];
-
-		foreach ($xml->channel->item as $item) {
-			$items[] = [
-				'title' => (string) $item->title,
-				'link' => (string) $item->link,
-			];
-
-			if (count($items) >= 6) {
-				break;
-			}
-		}
-
-		return response()->json(['items' => $items], 200);
-	} catch (Throwable $e) {
-		return response()->json(['items' => []], 200);
-	}
+	return response()->json([
+		'items' => virthub_cached_feed_items('virthub.news.cyber', 'https://feeds.feedburner.com/TheHackersNews'),
+	], 200);
 });

@@ -767,6 +767,80 @@ header h1 {
     background-color: var(--vh-button-hover);
 }
 
+.two-factor-panel {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--vh-border);
+}
+
+.two-factor-panel h4 {
+    margin: 0 0 8px;
+    color: var(--vh-text);
+    font-size: 15px;
+}
+
+.two-factor-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 4px 0 14px;
+    padding: 6px 10px;
+    border: 1px solid rgba(118, 224, 161, 0.45);
+    border-radius: 999px;
+    background: rgba(118, 224, 161, 0.12);
+    color: var(--vh-text);
+    font-size: 12px;
+}
+
+.two-factor-status::before {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #76e0a1;
+    content: '';
+}
+
+.two-factor-setup {
+    display: grid;
+    grid-template-columns: minmax(160px, 240px) 1fr;
+    align-items: center;
+    gap: 18px;
+    margin: 14px 0;
+    padding: 14px;
+    border: 1px solid var(--vh-border);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.two-factor-qr {
+    display: block;
+    width: 100%;
+    max-width: 240px;
+    height: auto;
+    border: 8px solid #fff;
+    background: #fff;
+}
+
+.two-factor-recovery {
+    margin: 12px 0;
+    padding: 12px;
+    overflow: auto;
+    border: 1px dashed var(--vh-border);
+    background: rgba(0, 0, 0, 0.16);
+    color: var(--vh-text);
+    font: 12px/1.7 Monocraft Nerd Font, monospace;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 640px) {
+    .two-factor-setup {
+        grid-template-columns: 1fr;
+    }
+
+    .two-factor-qr {
+        margin: 0 auto;
+    }
+}
+
 .sidebar {
     position: absolute;
     top: 52px;

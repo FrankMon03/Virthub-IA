@@ -48,18 +48,40 @@
                 <div class="header-login-card" role="dialog" aria-modal="true" aria-labelledby="headerLoginTitle" onclick="event.stopPropagation()">
                     <button type="button" class="header-login-close" id="closeLoginModal" aria-label="Cerrar">×</button>
                     <h2 id="headerLoginTitle">Iniciar sesión</h2>
-                    <form method="POST" action="{{ url('/login') }}">
-                        @csrf
-                        <label for="headerLoginUsername">Username</label>
-                        <input type="text" id="headerLoginUsername" name="username" value="{{ old('username') }}" required autofocus>
-                        <label for="headerLoginPassword">Contraseña</label>
-                        <input type="password" id="headerLoginPassword" name="password" required>
-                        <button type="submit">Entrar</button>
-                    </form>
-                    <form method="POST" action="{{ url('/guest-login') }}">
-                        @csrf
-                        <button type="submit" class="header-guest-button">Entrar como invitado</button>
-                    </form>
+                    @if (session('error'))
+                        <p class="auth-message auth-error" role="alert">{{ session('error') }}</p>
+                    @endif
+                    @if ($errors->any())
+                        <p class="auth-message auth-error" role="alert">{{ $errors->first() }}</p>
+                    @endif
+                    @if (session('two_factor_pending_username'))
+                        <p>Introduce el codigo de Google Authenticator para continuar.</p>
+                        <form method="POST" action="{{ url('/login/2fa') }}">
+                            @csrf
+                            <label for="headerTwoFactorCode">Codigo de seis digitos</label>
+                            <input type="text" id="headerTwoFactorCode" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus>
+                            <button type="submit">Verificar codigo</button>
+                        </form>
+                        <form method="POST" action="{{ url('/login/2fa/recovery') }}">
+                            @csrf
+                            <label for="headerRecoveryCode">Codigo de recuperacion</label>
+                            <input type="text" id="headerRecoveryCode" name="recovery_code" maxlength="32" required>
+                            <button type="submit">Usar recuperacion</button>
+                        </form>
+                    @else
+                        <form method="POST" action="{{ url('/login') }}">
+                            @csrf
+                            <label for="headerLoginUsername">Username</label>
+                            <input type="text" id="headerLoginUsername" name="username" value="{{ old('username') }}" required autofocus>
+                            <label for="headerLoginPassword">Contraseña</label>
+                            <input type="password" id="headerLoginPassword" name="password" required>
+                            <button type="submit">Entrar</button>
+                        </form>
+                        <form method="POST" action="{{ url('/guest-login') }}">
+                            @csrf
+                            <button type="submit" class="header-guest-button">Entrar como invitado</button>
+                        </form>
+                    @endif
                 </div>
             </div>
         @endif
@@ -101,6 +123,89 @@
         const openButton = document.getElementById('openLoginModal');
         const closeButton = document.getElementById('closeLoginModal');
         if (!modal || !openButton) return;
+        const shouldOpen = @json((bool) (session('two_factor_pending_username') || session('error') || $errors->any()));
+        const card = modal.querySelector('.header-login-card');
+
+        const getErrorMessage = payload => {
+            if (payload.error) return payload.error;
+            if (payload.message) return payload.message;
+            const firstError = payload.errors ? Object.values(payload.errors)[0] : null;
+            return Array.isArray(firstError) ? firstError[0] : 'No se pudo completar la solicitud.';
+        };
+
+        const showFeedback = message => {
+            let feedback = card.querySelector('[data-login-feedback]');
+            if (!feedback) {
+                feedback = document.createElement('p');
+                feedback.dataset.loginFeedback = 'true';
+                feedback.className = 'auth-message auth-error';
+                feedback.setAttribute('role', 'alert');
+                card.querySelector('h2')?.after(feedback);
+            }
+            feedback.textContent = message;
+            feedback.hidden = false;
+        };
+
+        const submitJsonForm = async form => {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': form.querySelector('input[name="_token"]')?.value || ''
+                },
+                body: new FormData(form)
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(getErrorMessage(payload));
+            return payload;
+        };
+
+        const bindAjaxForm = form => {
+            if (!form || form.dataset.ajaxBound === 'true') return;
+            form.dataset.ajaxBound = 'true';
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                try {
+                    const payload = await submitJsonForm(form);
+                    if (payload.two_factor_required) {
+                        showTwoFactorStep();
+                        return;
+                    }
+                    if (payload.authenticated) window.location.reload();
+                } catch (error) {
+                    showFeedback(error.message);
+                }
+            });
+        };
+
+        const showTwoFactorStep = () => {
+            card.querySelectorAll('form').forEach(form => {
+                form.hidden = true;
+            });
+
+            if (card.querySelector('[data-two-factor-step]')) return;
+
+            const token = card.querySelector('input[name="_token"]')?.value || '';
+            const step = document.createElement('div');
+            step.dataset.twoFactorStep = 'true';
+            step.innerHTML = `
+                <p>Introduce el codigo de Google Authenticator para continuar.</p>
+                <form method="POST" action="{{ url('/login/2fa') }}">
+                    <input type="hidden" name="_token" value="${token}">
+                    <label for="dynamicTwoFactorCode">Codigo de seis digitos</label>
+                    <input type="text" id="dynamicTwoFactorCode" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus>
+                    <button type="submit">Verificar codigo</button>
+                </form>
+                <form method="POST" action="{{ url('/login/2fa/recovery') }}">
+                    <input type="hidden" name="_token" value="${token}">
+                    <label for="dynamicRecoveryCode">Codigo de recuperacion</label>
+                    <input type="text" id="dynamicRecoveryCode" name="recovery_code" maxlength="32" required>
+                    <button type="submit">Usar recuperacion</button>
+                </form>`;
+            card.appendChild(step);
+            step.querySelectorAll('form').forEach(bindAjaxForm);
+            step.querySelector('input[name="code"]')?.focus();
+        };
 
         const close = () => {
             modal.classList.remove('is-open');
@@ -110,12 +215,21 @@
         openButton.addEventListener('click', () => {
             modal.classList.add('is-open');
             modal.setAttribute('aria-hidden', 'false');
-            document.getElementById('headerLoginUsername')?.focus();
+            (document.getElementById('headerLoginUsername') || document.getElementById('headerTwoFactorCode'))?.focus();
         });
         closeButton?.addEventListener('click', close);
         modal.addEventListener('click', close);
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') close();
         });
+
+        card.querySelectorAll('form[action$="/login"], form[action$="/login/2fa"], form[action$="/login/2fa/recovery"]')
+            .forEach(bindAjaxForm);
+
+        if (shouldOpen) {
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            (document.getElementById('headerLoginUsername') || document.getElementById('headerTwoFactorCode'))?.focus();
+        }
     })();
 </script>

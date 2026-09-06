@@ -150,6 +150,7 @@
 
             <form method="POST" action="{{ url('/install') }}">
                 @csrf
+                <input type="hidden" name="key" value="{{ $installationKey }}">
                 <label for="admin_username">Nombre de administrador</label>
                 <input id="admin_username" name="admin_username" value="admin" required>
 

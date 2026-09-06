@@ -223,6 +223,65 @@
                     </label>
                     <button type="submit">Cambiar mi contrasena</button>
                 </form>
+
+                <div class="two-factor-panel">
+                    <h4>Autenticacion de dos factores</h4>
+                @if (!empty($twoFactorRecoveryCodes = session('two_factor_recovery_codes')))
+                    <p class="config-note">Guarda estos codigos. Cada uno puede usarse una sola vez.</p>
+                    <pre class="two-factor-recovery">{{ implode("\n", $twoFactorRecoveryCodes) }}</pre>
+                @endif
+
+                @if ($twoFactorEnabled)
+                    <p class="two-factor-status">2FA activo con Google Authenticator.</p>
+                    <form method="POST" action="/security/2fa/recovery-codes" class="profile-form-block" id="recoveryCodesForm">
+                        @csrf
+                        <label>
+                            Contrasena actual para regenerar codigos
+                            <input type="password" name="current_password" required>
+                        </label>
+                        <label>
+                            Codigo actual de Authenticator
+                            <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+                        </label>
+                        <button type="submit">Generar nuevos codigos</button>
+                        <p class="auth-message" id="recoveryCodesFeedback" hidden role="alert"></p>
+                        <pre class="two-factor-recovery" id="recoveryCodesOutput" hidden></pre>
+                    </form>
+                    <form method="POST" action="/security/2fa/disable" class="profile-form-block">
+                        @csrf
+                        <label>
+                            Contrasena actual
+                            <input type="password" name="current_password" required>
+                        </label>
+                        <label>
+                            Codigo actual de Authenticator
+                            <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+                        </label>
+                        <button type="submit">Desactivar 2FA</button>
+                    </form>
+                @elseif ($twoFactorSetupQr)
+                    <p class="config-note">Escanea este codigo con Google Authenticator y confirma el codigo de seis digitos.</p>
+                    <div class="two-factor-setup">
+                        <img class="two-factor-qr" src="{{ $twoFactorSetupQr }}" alt="Codigo QR para configurar Google Authenticator" width="240" height="240">
+                        <form method="POST" action="/security/2fa/confirm" class="profile-form-block" id="twoFactorConfirmForm">
+                            @csrf
+                            <label>
+                                Codigo de confirmacion
+                                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+                            </label>
+                            <button type="submit">Confirmar 2FA</button>
+                        </form>
+                        <p class="auth-message" id="activationRecoveryFeedback" hidden role="alert"></p>
+                        <pre class="two-factor-recovery" id="activationRecoveryCodes" hidden></pre>
+                    </div>
+                @else
+                    <p class="config-note">Protege tu cuenta con un codigo temporal de Google Authenticator.</p>
+                    <form method="POST" action="/security/2fa/setup">
+                        @csrf
+                        <button type="submit">Configurar Google Authenticator</button>
+                    </form>
+                @endif
+                </div>
             </section>
         </div>
     </div>
@@ -292,6 +351,80 @@
             if (!launcher) return;
 
             launcher.classList.toggle('is-open');
+        }
+
+        function getCsrfToken(form) {
+            return form.querySelector('input[name="_token"]')?.value || '';
+        }
+
+        async function submitJsonForm(form) {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(form)
+                },
+                body: new FormData(form)
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.error || 'No se pudo completar la solicitud.');
+            }
+
+            return payload;
+        }
+
+        function bindRecoveryCodesForm() {
+            const form = document.getElementById('recoveryCodesForm');
+            const feedback = document.getElementById('recoveryCodesFeedback');
+            const output = document.getElementById('recoveryCodesOutput');
+            if (!form || !feedback || !output) return;
+
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                feedback.hidden = true;
+
+                try {
+                    const payload = await submitJsonForm(form);
+                    output.textContent = (payload.recovery_codes || []).join('\n');
+                    output.hidden = false;
+                    feedback.className = 'auth-message auth-success';
+                    feedback.textContent = 'Codigos regenerados. Guardalos ahora; cada uno se usa una sola vez.';
+                    feedback.hidden = false;
+                    form.reset();
+                } catch (error) {
+                    feedback.className = 'auth-message auth-error';
+                    feedback.textContent = error.message;
+                    feedback.hidden = false;
+                }
+            });
+        }
+
+        function bindTwoFactorConfirmForm() {
+            const form = document.getElementById('twoFactorConfirmForm');
+            const feedback = document.getElementById('activationRecoveryFeedback');
+            const output = document.getElementById('activationRecoveryCodes');
+            if (!form || !feedback || !output) return;
+
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                feedback.hidden = true;
+
+                try {
+                    const payload = await submitJsonForm(form);
+                    output.textContent = (payload.recovery_codes || []).join('\n');
+                    output.hidden = false;
+                    feedback.className = 'auth-message auth-success';
+                    feedback.textContent = '2FA activado. Guarda estos codigos de recuperacion ahora.';
+                    feedback.hidden = false;
+                    form.hidden = true;
+                } catch (error) {
+                    feedback.className = 'auth-message auth-error';
+                    feedback.textContent = error.message;
+                    feedback.hidden = false;
+                }
+            });
         }
 
         function bindFrameColorLivePreview() {
@@ -445,6 +578,8 @@
         window.addEventListener('DOMContentLoaded', applyThemeState);
         window.addEventListener('DOMContentLoaded', bindFrameColorLivePreview);
         window.addEventListener('DOMContentLoaded', bindProfileCropEditor);
+        window.addEventListener('DOMContentLoaded', bindRecoveryCodesForm);
+        window.addEventListener('DOMContentLoaded', bindTwoFactorConfirmForm);
     </script>
 </body>
 </html>

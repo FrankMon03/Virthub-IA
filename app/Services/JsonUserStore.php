@@ -326,6 +326,116 @@ class JsonUserStore
         return Hash::check($password, (string) ($user['password_hash'] ?? ''));
     }
 
+    public function hasTwoFactorEnabled(string $username): bool
+    {
+        $user = $this->findByUsername($username);
+
+        return !empty($user['two_factor_enabled'])
+            && trim((string) ($user['two_factor_secret'] ?? '')) !== '';
+    }
+
+    public function enableTwoFactor(string $username, string $encryptedSecret, array $recoveryCodeHashes): void
+    {
+        $this->updateUsers(function (array &$users) use ($username, $encryptedSecret, $recoveryCodeHashes): void {
+            foreach ($users as &$user) {
+                if (($user['username'] ?? '') !== $username) {
+                    continue;
+                }
+
+                $user['two_factor_enabled'] = true;
+                $user['two_factor_secret'] = $encryptedSecret;
+                $user['two_factor_recovery_codes'] = array_values($recoveryCodeHashes);
+                $user['two_factor_confirmed_at'] = now()->toDateTimeString();
+
+                return;
+            }
+            unset($user);
+
+            throw new RuntimeException('No existe un usuario con ese username.');
+        });
+    }
+
+    public function disableTwoFactor(string $username): void
+    {
+        $this->updateUsers(function (array &$users) use ($username): void {
+            foreach ($users as &$user) {
+                if (($user['username'] ?? '') !== $username) {
+                    continue;
+                }
+
+                $user['two_factor_enabled'] = false;
+                $user['two_factor_secret'] = null;
+                $user['two_factor_recovery_codes'] = [];
+                $user['two_factor_confirmed_at'] = null;
+
+                return;
+            }
+            unset($user);
+
+            throw new RuntimeException('No existe un usuario con ese username.');
+        });
+    }
+
+    public function replaceTwoFactorRecoveryCodes(string $username, array $recoveryCodeHashes): void
+    {
+        $this->updateUsers(function (array &$users) use ($username, $recoveryCodeHashes): void {
+            foreach ($users as &$user) {
+                if (($user['username'] ?? '') !== $username) {
+                    continue;
+                }
+
+                $user['two_factor_recovery_codes'] = array_values($recoveryCodeHashes);
+
+                return;
+            }
+            unset($user);
+
+            throw new RuntimeException('No existe un usuario con ese username.');
+        });
+    }
+
+    public function twoFactorSecret(string $username): ?string
+    {
+        $user = $this->findByUsername($username);
+
+        if (!$user || !$this->hasTwoFactorEnabled($username)) {
+            return null;
+        }
+
+        return (string) ($user['two_factor_secret'] ?? '');
+    }
+
+    public function consumeTwoFactorRecoveryCode(string $username, string $code): bool
+    {
+        return $this->updateUsers(function (array &$users) use ($username, $code): bool {
+            foreach ($users as &$user) {
+                if (($user['username'] ?? '') !== $username) {
+                    continue;
+                }
+
+                $recoveryCodes = is_array($user['two_factor_recovery_codes'] ?? null)
+                    ? $user['two_factor_recovery_codes']
+                    : [];
+
+                foreach ($recoveryCodes as $index => $recoveryHash) {
+                    if (!Hash::check(strtoupper(trim($code)), (string) $recoveryHash)) {
+                        continue;
+                    }
+
+                    unset($recoveryCodes[$index]);
+                    $user['two_factor_recovery_codes'] = array_values($recoveryCodes);
+
+                    return true;
+                }
+
+                return false;
+            }
+            unset($user);
+
+            return false;
+        });
+    }
+
     public function updateProfileAppearance(string $username, ?string $profileImagePath, ?string $profileFrameColor): void
     {
         $username = trim($username);
