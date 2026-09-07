@@ -232,4 +232,43 @@
             (document.getElementById('headerLoginUsername') || document.getElementById('headerTwoFactorCode'))?.focus();
         }
     })();
+
+    (() => {
+        const prefetchedUrls = new Set();
+
+        const canPrefetch = link => {
+            if (!link || link.dataset.noPrefetch !== undefined || link.target === '_blank') return false;
+            if (link.closest('form') || link.hasAttribute('download')) return false;
+
+            const url = new URL(link.href, window.location.href);
+            return url.origin === window.location.origin
+                && ['http:', 'https:'].includes(url.protocol)
+                && url.pathname !== '/contenedor/launch';
+        };
+
+        const prefetch = link => {
+            if (!canPrefetch(link)) return;
+
+            const url = new URL(link.href, window.location.href).href;
+            if (prefetchedUrls.has(url) || url === window.location.href) return;
+
+            prefetchedUrls.add(url);
+            const hint = document.createElement('link');
+            hint.rel = 'prefetch';
+            hint.href = url;
+            hint.as = 'document';
+            document.head.appendChild(hint);
+        };
+
+        document.addEventListener('pointerover', event => {
+            const link = event.target.closest?.('a[href]');
+            if (!link) return;
+
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(() => prefetch(link), { timeout: 350 });
+            } else {
+                window.setTimeout(() => prefetch(link), 80);
+            }
+        }, { passive: true });
+    })();
 </script>
